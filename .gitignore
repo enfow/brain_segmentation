@@ -1,0 +1,14 @@
+# Settings
+.env
+
+# DATASET
+/Dataset
+
+# cache
+.ipynb_checkpoints/
+
+# paper
+Brebisson_Deep_Neural_Networks_2015_CVPR_paper.pdf
+
+
+
