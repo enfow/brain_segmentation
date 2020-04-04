@@ -4,6 +4,9 @@
 # DATASET
 /Dataset
 
+# jupyterlab playground
+playground.ipynb
+
 # cache
 .ipynb_checkpoints/
 
