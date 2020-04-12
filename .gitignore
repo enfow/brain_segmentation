@@ -1,8 +1,13 @@
+# vscode/ds_store
+.DS_Store
+.vscode/
+
 # Settings
 .env
 
 # DATASET
 /Dataset
+/reference
 
 # jupyterlab playground
 playground.ipynb
@@ -12,6 +17,4 @@ playground.ipynb
 
 # paper
 Brebisson_Deep_Neural_Networks_2015_CVPR_paper.pdf
-
-
 
