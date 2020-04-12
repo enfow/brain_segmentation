@@ -145,7 +145,7 @@ class BrainSegmentationDataset(Dataset):
         
         x["centroid"] = self.centroid.compute_scaled_distances(sample["y_index"])
         
-        y = torch.from_numpy(sample["y_value"])
+        y = sample["y_value"]
         
         return (x, y)
 
