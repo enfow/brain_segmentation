@@ -168,7 +168,7 @@ if __name__ == "__main__":
     learning_rate = 0.01
     epochs = 10
 
-    model = SegNet()
+    model = SegNet(use_cuda=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_func = nn.CrossEntropyLoss()
 
