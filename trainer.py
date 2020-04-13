@@ -35,8 +35,11 @@ def get_data(data_dir, data_file=None):
     ### settings for nibabel ###
     nib.Nifti1Header.quaternion_threshold = -1e-06
 
-    data_list = [np.array(nib.load(data).dataobj).astype(np.float64) for data in nii_files]
-    label_list = [np.array(nib.load(data).dataobj).astype(np.float64) for data in glm_files]
+    data_list = [np.pad(np.array(nib.load(data).dataobj).astype(np.float32), ((43,43),(43,43),(43,43)),'constant', constant_values=(0))  for data in nii_files]
+    label_list = [np.pad(np.array(nib.load(data).dataobj).astype(np.float32), ((43,43),(43,43),(43,43)),'constant', constant_values=(0)) for data in glm_files]
+
+    # data_list = [np.array(nib.load(data).dataobj).astype(np.float32) for data in nii_files]
+    # label_list = [np.array(nib.load(data).dataobj).astype(np.float32) for data in glm_files]
 
     return data_list, label_list
 
@@ -137,6 +140,7 @@ if __name__ == "__main__":
 
     ### GET DATA ###
 
+    print("GET DATA")
     data_dir = "./Dataset/Training/Data"
     data_file = None
 
@@ -145,6 +149,7 @@ if __name__ == "__main__":
 
     ### GET DATA LOADER ###
 
+    print("GET DATALOADER")
     x, y = data_list[0], label_list[0]
 
     # number_of_label = 207
@@ -157,10 +162,11 @@ if __name__ == "__main__":
 
     ### SETTINGS FOR TRAINING ###
 
+    print("SETTINGS FOR TRAINING")
     from model.segnet import SegNet
 
-    learning_rate = 0.1
-    epochs = 1
+    learning_rate = 0.01
+    epochs = 10
 
     model = SegNet()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -187,14 +193,15 @@ if __name__ == "__main__":
                 print("step : {}".format(step))
 
         # validation
-        for test_data, test_labels in brain_dataloader:
-            test_output = model(test_data)
-            pred = torch.max(test_output, 1)[1].data.numpy()
-            accuracy = float((pred == test_labels.data.numpy()).astype(int).sum()) / float(test_labels.size(0))
-            # print("EVALUATION) Epoch : {} | step : {} | loss : {} | accuracy : {}".format(epoch, step, round(float(loss.data),4), accuracy))
-            print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch, step,  accuracy))
-            # loss_list.append(round(float(loss.data), 2))
-            acc_list.append(round(float(accuracy), 2))
+        if epoch % 5 == 0:
+            for test_data, test_labels in brain_dataloader:
+                test_output = model(test_data)
+                pred = torch.max(test_output, 1)[1].data.numpy()
+                accuracy = float((pred == test_labels.data.numpy()).astype(int).sum()) / float(test_labels.size(0))
+                # print("EVALUATION) Epoch : {} | step : {} | loss : {} | accuracy : {}".format(epoch, step, round(float(loss.data),4), accuracy))
+                print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch, step,  accuracy))
+                # loss_list.append(round(float(loss.data), 2))
+                acc_list.append(round(float(accuracy), 2))
 
 
 
