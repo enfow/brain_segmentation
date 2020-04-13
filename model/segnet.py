@@ -10,10 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class SegNet(nn.Module):
-    def __init__(self):
+    def __init__(self, use_cuda=False):
         super(SegNet, self).__init__()
-        # self.dataset_name = parameters["dataset"]
-        # self.use_cuda = parameters["use_cuda"]
+        self.use_cuda = use_cuda
 
         self.kernel_size = 3
         self.pooling_size = 2
@@ -44,18 +43,30 @@ class SegNet(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-        # if self.use_cuda:
-        #     self.cnn_layer = self.cnn_layer.cuda()
-        #     self.fully_connected_layer = self.fully_connected_layer.cuda()
+        if self.use_cuda:
+            for i in range(3):
+                self.cnn_layer_2d_patch_scale1[i] = self.cnn_layer_2d_patch_scale1[i].cuda()
+                self.cnn_layer_2d_patch_scale3[i] = self.cnn_layer_2d_patch_scale3[i].cuda()
+            self.fully_connected_layer = self.fully_connected_layer.cuda()
     
     def forward(self, input_value):
-        patch_x_scale_1 = input_value["patch_x_scale_1"].float()
-        patch_y_scale_1 = input_value["patch_y_scale_1"].float()
-        patch_z_scale_1 = input_value["patch_z_scale_1"].float()
 
-        patch_x_scale_3 = input_value["patch_x_scale_3"].float()
-        patch_y_scale_3 = input_value["patch_y_scale_3"].float()
-        patch_z_scale_3 = input_value["patch_z_scale_3"].float()
+        if self.use_cuda:
+            patch_x_scale_1 = input_value["patch_x_scale_1"].float().cuda()
+            patch_y_scale_1 = input_value["patch_y_scale_1"].float().cuda()
+            patch_z_scale_1 = input_value["patch_z_scale_1"].float().cuda()
+
+            patch_x_scale_3 = input_value["patch_x_scale_3"].float().cuda()
+            patch_y_scale_3 = input_value["patch_y_scale_3"].float().cuda()
+            patch_z_scale_3 = input_value["patch_z_scale_3"].float().cuda()
+        else:
+            patch_x_scale_1 = input_value["patch_x_scale_1"].float()
+            patch_y_scale_1 = input_value["patch_y_scale_1"].float()
+            patch_z_scale_1 = input_value["patch_z_scale_1"].float()
+
+            patch_x_scale_3 = input_value["patch_x_scale_3"].float()
+            patch_y_scale_3 = input_value["patch_y_scale_3"].float()
+            patch_z_scale_3 = input_value["patch_z_scale_3"].float()
 
         x = self.cnn_layer_2d_patch_scale1[0](patch_x_scale_1) \
             + self.cnn_layer_2d_patch_scale1[1](patch_y_scale_1) \
@@ -67,6 +78,10 @@ class SegNet(nn.Module):
 
         x = x.view(x.size(0), -1)
         x = self.fully_connected_layer(x)
+
+        if self.use_cuda:
+            x = x.cpu()
+
         return x
 
     def get_network_for_2d_patch_scale_1(self):
