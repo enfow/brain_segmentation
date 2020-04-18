@@ -19,3 +19,6 @@ __pycache__/
 # paper
 Brebisson_Deep_Neural_Networks_2015_CVPR_paper.pdf
 
+# trained model and log
+*.pth
+*.txt
