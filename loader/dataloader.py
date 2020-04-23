@@ -6,7 +6,7 @@ from sklearn.preprocessing import MinMaxScaler
 from skimage.io import imread
 import nibabel as nib
 
-from segnet_loader.utils import return_largest_size, add_zero_padding_with_shape, return_label_dicts
+from loader.utils import return_largest_size, add_zero_padding_with_shape, return_label_dicts
 
 
 def get_data(data_dir, data_file=None, num_of_data=None, padding=0):
