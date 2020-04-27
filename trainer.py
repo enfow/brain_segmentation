@@ -28,14 +28,19 @@ present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  35,  36,  37,
 ### TEST MODEL AND DATALOADER
 
 if __name__ == "__main__":
-    from model.segnet import SegNet3DK5L4, SegNet3DK5L3
+    from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5
 
     # get present label dictionary
     label_to_idx, idx_to_label = return_label_dicts(present_label_list)
     num_of_label = len(label_to_idx.keys())
 
-    # model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True)  #acc 0.45 
-    model = SegNet3DK5L3(num_of_class=num_of_label, use_cuda=True)    #acc 0.54
+    seed=1
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    # model = SegNet3DK5L3(num_of_class=num_of_label, use_cuda=True)
+    model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True)  
+
 
     with open("{}_log.txt".format(model.name), "w") as f:
         f.write("model : {}\n".format(model))
@@ -47,7 +52,7 @@ if __name__ == "__main__":
         data_file = None
 
         # get dataset
-        data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=1, padding=43)
+        data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43)
 
         print("data shape : {}".format(data.shape) )
         print("test_data shape : {}".format(test_data.shape))
@@ -76,14 +81,14 @@ if __name__ == "__main__":
 
         print("SETTINGS FOR TRAINING")
 
-        learning_rate = 0.05
-        epochs = 10
+        learning_rate = 0.01
+        epochs = 7
 
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         loss_func = nn.CrossEntropyLoss()
 
         print("EPOCH : {} | learning_rate : {}".format(epochs, learning_rate))
-        f.write("EPOCH : {} | learning_rate : {}\n".format(epochs, learning_rate))
+        f.write("EPOCH : {} | learning_rate : {} | seed : {}\n".format(epochs, learning_rate, seed))
 
 
         ### TRAINING ###
