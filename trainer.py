@@ -115,7 +115,10 @@ class BrainSegmentationDataset(Dataset):
         data_index = valid_label[idx]["y_index"]
         i, j, k = data_index[0], data_index[1], data_index[2]
 
+        print(data_index)
+        print(self.single_brain_data.shape)
         sample = self.single_brain_data[i-43:i+44, j-43:j+44, k-43:k+44]
+        print(sample.shape)
         x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[43][29:58, 29:58]), 0)
         x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, 43][29:58, 29:58]), 0)
         x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, : ,43][29:58, 29:58]), 0)
