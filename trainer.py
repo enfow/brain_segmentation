@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -27,22 +28,56 @@ present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  35,  36,  37,
 
 ### TEST MODEL AND DATALOADER
 
+def define_argparser():
+    import argparse
+
+    p = argparse.ArgumentParser()
+
+    p.add_argument(
+        '--seed', default=1, type=int
+    )
+    p.add_argument(
+        '--epochs', default=10, type=int
+    )
+    p.add_argument(
+        '--lr', default=0.01, type=float
+    )
+    p.add_argument(
+        '--batch_size', default=512, type=int
+    )
+
+    config = p.parse_args()
+
+    return config
+
+
 if __name__ == "__main__":
     from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5
+
+    import os
+    import GPUtil
+    # devices = "%d" % GPUtil.getFirstAvailable(order="memory")[0]
+    os.environ['CUDA_VISIBLE_DEVICES']="2"
+
+    config = define_argparser()
 
     # get present label dictionary
     label_to_idx, idx_to_label = return_label_dicts(present_label_list)
     num_of_label = len(label_to_idx.keys())
 
-    seed=1
+    seed=config.seed
     np.random.seed(seed)
     torch.manual_seed(seed)
 
     # model = SegNet3DK5L3(num_of_class=num_of_label, use_cuda=True)
     model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True)  
 
+    dir_name = "{}_seed{}".format(model.name, seed)
 
-    with open("{}_log.txt".format(model.name), "w") as f:
+    if not os.path.exists(os.path.join('.', dir_name)):
+        os.mkdir(os.path.join('.', dir_name))
+
+    with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
         f.write("model : {}\n".format(model))
 
         ### GET DATA ###
@@ -69,20 +104,20 @@ if __name__ == "__main__":
         # GET TRAINSET
         valid_voxel = get_valid_voxel(data, label, label_to_idx)
         brain_dataset = BrainSegmentationDataset3D(data, valid_voxel)
-        brain_dataloader = DataLoader(brain_dataset, batch_size=512, shuffle=True)
+        brain_dataloader = DataLoader(brain_dataset, batch_size=config.batch_size, shuffle=True)
 
         # GET TESTSET
         test_valid_label = get_valid_voxel(test_data, test_label, label_to_idx)
         test_brain_dataset = BrainSegmentationDataset3D(test_data, test_valid_label)
-        test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=512, shuffle=True)
+        test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
 
 
         ### SETTINGS FOR TRAINING ###
 
         print("SETTINGS FOR TRAINING")
 
-        learning_rate = 0.01
-        epochs = 7
+        learning_rate = config.lr
+        epochs = config.epochs
 
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         loss_func = nn.CrossEntropyLoss()
@@ -123,7 +158,7 @@ if __name__ == "__main__":
                 "model_state_dict" : model.state_dict(),
                 "optimizer_state_dict" : optimizer.state_dict(),
                 "loss" : loss,
-            }, "./{model_name}_{epoch}.pth".format(model_name=model.name, epoch=epoch+1))
+            }, "./{dir_name}/{model_name}_{epoch}_{seed}.pth".format(dir_name=dir_name, model_name=model.name, epoch=epoch+1, seed=seed))
 
             # test
             # if epoch % 2 == 1:
