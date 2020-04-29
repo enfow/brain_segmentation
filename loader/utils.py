@@ -19,8 +19,8 @@ def add_zero_padding_with_shape(arr, shp):
 
 
 def return_label_dicts(present_label_list):
-    label_to_idx,idx_to_label = {}, {}
+    label_to_idx, idx_to_label = {}, {}
     for idx, l in enumerate(present_label_list):
         label_to_idx[l] = idx
         idx_to_label[idx] = l
-    return label_to_idx,idx_to_label
+    return label_to_idx, idx_to_label
