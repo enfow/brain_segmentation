@@ -89,20 +89,19 @@ def get_data(
 
 def get_valid_voxel(x, y, label_to_idx):
     valid_voxel = []
-    x_shape = x.shape
-    for i in range(x_shape[0]):
-        for j in range(x_shape[1]):
-            for k in range(x_shape[2]):
-                for l in range(x_shape[2]):
-                    if y[i][j][k][l] == 0:
-                        pass
-                    else:
-                        valid_voxel.append(
-                            {
-                                "y_index" : [i,j,k,l],
-                                "y_value" : label_to_idx[int(y[i][j][k][l])],
-                            }
-                        )
+    a_1, a_2, a_3, a_4 = x.nonzero()
+    
+    for i in range(len(a_1)): 
+        if y[a_1[i]][a_2[i]][a_3[i]][a_4[i]] == 0:
+            pass
+        else:
+            valid_voxel.append(
+                {
+                    "y_index" : [a_1[i],a_2[i],a_3[i],a_4[i]],
+                    "y_value" : label_to_idx[int(y[a_1[i]][a_2[i]][a_3[i]][a_4[i]])],
+                }
+            )
+    
     return valid_voxel
 
 
