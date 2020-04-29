@@ -29,6 +29,7 @@ present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  35,  36,  37,
 ### TEST MODEL AND DATALOADER
 
 def define_argparser():
+
     import argparse
 
     p = argparse.ArgumentParser()
@@ -55,8 +56,6 @@ if __name__ == "__main__":
     from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5
 
     import os
-    import GPUtil
-    # devices = "%d" % GPUtil.getFirstAvailable(order="memory")[0]
     os.environ['CUDA_VISIBLE_DEVICES']="2"
 
     config = define_argparser()
@@ -86,8 +85,18 @@ if __name__ == "__main__":
         data_dir = "./Dataset/Training/Data"
         data_file = None
 
-        # get dataset
-        data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43)
+        test_dir = "./Dataset/Testing/Data"
+        test_file = None
+
+        # get train / test dataset
+        # data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=False)
+
+        # get train dataset
+        data, label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=False)
+        
+        # get test dataset
+        test_data, test_label = get_data(test_dir, data_file=test_file, num_of_data=None, padding=43, get_test_set=False)
+
 
         print("data shape : {}".format(data.shape) )
         print("test_data shape : {}".format(test_data.shape))
