@@ -9,7 +9,13 @@ import nibabel as nib
 from loader.utils import return_largest_size, add_zero_padding_with_shape, return_label_dicts
 
 
-def get_data(data_dir, data_file=None, num_of_data=None, padding=0):
+def get_data(
+            data_dir, 
+            data_file=None, 
+            num_of_data=None, 
+            padding=0, 
+            get_test_set=False
+            ):
 
     """
     data_file -> None : get all data from data directory
@@ -60,15 +66,25 @@ def get_data(data_dir, data_file=None, num_of_data=None, padding=0):
         for j in range(data[num_of_data].shape[0]):
             data[num_of_data][j]=scaler.transform(data[num_of_data][j])
 
-    train_set, train_label = data[:-1], label[:-1]
-    test_set, test_label = np.array([data[-1]]), np.array([label[-1]])
+    if get_test_set :
+        train_set, train_label = data[:-1], label[:-1]
+        test_set, test_label = np.array([data[-1]]), np.array([label[-1]])
+        del data
+        del label
+        del data_list
+        del label_list
 
-    del data
-    del label
-    del data_list
-    del label_list
+        return train_set, train_label, test_set, test_label
 
-    return train_set, train_label, test_set, test_label
+    else : 
+        train_set, train_label = data[:-1], label[:-1]
+        del data
+        del label
+        del data_list
+        del label_list
+
+        return train_set, train_label
+
 
 
 def get_valid_voxel(x, y, label_to_idx):
