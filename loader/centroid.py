@@ -19,14 +19,24 @@ class RegionCentroids():
 
     def compute_scaled_distances(self, vx):
         distances = np.linalg.norm(self.barycentres - vx, axis=1)
+        max_distance= distances.max()
+        distances = distances / max_distance
         return distances
 
 
-def get_centroid_obj(y):
-    label_list = np.unique(y)
-    centroid_obj = RegionCentroids(int(label_list.max())+1) # parameter로 전체 label + 1개 전달
-    temp = y.nonzero()
+def get_centroid_obj(single_brain_label, present_label_list):
+    # centroid_obj = RegionCentroids(int(present_label_list.max())+1) # parameter로 전체 label + 1개 전달
+    centroid_obj = RegionCentroids(len(present_label_list)) # parameter로 전체 label + 1개 전달
+    temp = single_brain_label.nonzero()
     vxs = np.asarray(temp).T
-    centroid_obj.update_barycentres(vxs, y[temp])
+    centroid_obj.update_barycentres(vxs, single_brain_label[temp])
     return centroid_obj
+
+
+def get_centroid_list(label, present_label_list):
+    centroid_list = []
+    num_of_brain = label.shape[0]
+    for idx in range(num_of_brain):
+        centroid_list.append(get_centroid_obj(label[idx], present_label_list))
+    return centroid_list
 

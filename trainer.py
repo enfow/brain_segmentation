@@ -7,17 +7,18 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from loader.dataloader import get_data, get_valid_voxel
-from loader.dataloader import BrainSegmentationDataset, BrainSegmentationDataset3D
-from loader.utils import return_label_dicts
+from loader.dataloader import BrainSegmentationDataset, BrainSegmentationDataset3D, BrainSegmentationDataset3DCentroid
+from loader.utils import return_label_dicts, get_valid_label
+from loader.centroid import get_centroid_list
 
 
-present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  35,  36,  37,
+present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  33,  34,  35,  36,  37,     # add 33, 34
                         38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,
                         49,  50,  51,  52,  55,  56,  57,  58,  59,  60,  61,
                         62,  63,  64,  65,  66,  69,  71,  72,  73,  74,  75,
                         76, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
                         112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
-                        123, 124, 125, 128, 129, 132, 133, 134, 135, 136, 137,
+                        123, 124, 125, 126, 127, 128, 129, 132, 133, 134, 135, 136, 137,   # add 126, 127
                         138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148,
                         149, 150, 151, 152, 153, 154, 155, 156, 157, 160, 161,
                         162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
@@ -53,7 +54,7 @@ def define_argparser():
 
 
 if __name__ == "__main__":
-    from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5
+    from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5, SegNet3DK5L4Cent
 
     import os
     os.environ['CUDA_VISIBLE_DEVICES']="2"
@@ -69,7 +70,8 @@ if __name__ == "__main__":
     torch.manual_seed(seed)
 
     # model = SegNet3DK5L3(num_of_class=num_of_label, use_cuda=True)
-    model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True)  
+    # model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True) 
+    model = SegNet3DK5L4Cent(num_of_class=num_of_label, use_cuda=True)
 
     dir_name = "{}_seed{}".format(model.name, seed)
 
@@ -89,13 +91,15 @@ if __name__ == "__main__":
         test_file = None
 
         # get train / test dataset
-        # data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=False)
+        # data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=True)
 
         # get train dataset
-        data, label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=False)
+        data, label = get_data(data_dir, data_file=data_file, num_of_data=2, padding=43, get_test_set=False)
+        label = get_valid_label(label, label_to_idx)
         
         # get test dataset
-        test_data, test_label = get_data(test_dir, data_file=test_file, num_of_data=None, padding=43, get_test_set=False)
+        test_data, test_label = get_data(test_dir, data_file=test_file, num_of_data=2, padding=43, get_test_set=False)
+        test_label = get_valid_label(test_label, label_to_idx)
 
 
         print("data shape : {}".format(data.shape) )
@@ -108,17 +112,35 @@ if __name__ == "__main__":
 
         ### GET DATA LOADER ###
 
+        # print("GET DATALOADER")
+
+        # # GET TRAINSET
+        # valid_voxel = get_valid_voxel(data, label, label_to_idx)
+        # brain_dataset = BrainSegmentationDataset3D(data, valid_voxel)
+        # brain_dataloader = DataLoader(brain_dataset, batch_size=config.batch_size, shuffle=True)
+
+        # # GET TESTSET
+        # test_valid_label = get_valid_voxel(test_data, test_label, label_to_idx)
+        # test_brain_dataset = BrainSegmentationDataset3D(test_data, test_valid_label)
+        # test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
+
+
         print("GET DATALOADER")
 
         # GET TRAINSET
         valid_voxel = get_valid_voxel(data, label, label_to_idx)
-        brain_dataset = BrainSegmentationDataset3D(data, valid_voxel)
+        data_centroid_list = get_centroid_list(label, present_label_list)
+        brain_dataset = BrainSegmentationDataset3DCentroid(data, valid_voxel, present_label_list, centroid_list=data_centroid_list)
         brain_dataloader = DataLoader(brain_dataset, batch_size=config.batch_size, shuffle=True)
 
         # GET TESTSET
         test_valid_label = get_valid_voxel(test_data, test_label, label_to_idx)
-        test_brain_dataset = BrainSegmentationDataset3D(test_data, test_valid_label)
+        test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_label, present_label_list)
         test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
+
+        del data
+        del label
+        del test_data
 
 
         ### SETTINGS FOR TRAINING ###
@@ -173,10 +195,19 @@ if __name__ == "__main__":
             # if epoch % 2 == 1:
             model.eval()
             count, accuracy = 0, 0
+            pred_test_label =np.zeros_like(test_label)
+            print("pred_test_label shape {}".format(pred_test_label.shape))
             for test_data, test_labels in tqdm(test_brain_dataloader, desc="EVALUATION "):
+                pred_idx = test_data["index"].reshape(-1, 4)
                 count += 1
                 test_output = model(test_data)
                 pred = torch.max(test_output, 1)[1].data.numpy()
+                pred_re = pred.reshape(-1, 1)
+                print("pred_idx", pred_idx.shape)
+                print("pred_re", pred_re.shape)
+                for i in range(pred_re.shape[0]):
+                    idx = pred_idx[i]
+                    pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
                 accuracy += (float((pred == test_labels.data.numpy()).astype(int).sum()) / float(test_labels.size(0)))
                 del test_data
                 del test_labels
@@ -185,6 +216,11 @@ if __name__ == "__main__":
             print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch+1, step,  round( accuracy / count, 4)))
             f.write("EVALUATION) Epoch : {} | step : {} | accuracy : {}\n".format(epoch+1, step,  round( accuracy / count, 4)))
             acc_list.append(round(float(accuracy) / count, 4))
+
+            test_centroid_list = get_centroid_list(pred_test_label, present_label_list)
+            test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_label, present_label_list, centroid_list=test_centroid_list)
+            test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
+
             model.train()
 
         print("ACCURACY HISTORY : {}".format(acc_list))

@@ -24,3 +24,12 @@ def return_label_dicts(present_label_list):
         label_to_idx[l] = idx
         idx_to_label[idx] = l
     return label_to_idx, idx_to_label
+
+
+def return_new_label(l, label_to_idx):
+    return label_to_idx[l]
+
+def get_valid_label(original_label, label_to_idx):
+    vectorized_return_new_label = np.vectorize(return_new_label, otypes=[np.int])
+
+    return vectorized_return_new_label(original_label, label_to_idx)
