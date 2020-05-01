@@ -154,6 +154,8 @@ class BrainSegmentationDataset3D(Dataset):
         i, j, k, l = data_index[0], data_index[1], data_index[2], data_index[3]
 
         sample = self.brain_data[i][j-43:j+44, k-43:k+44, l-43:l+44]
+        x["index"] = np.array([i,j,k,l])
+
         x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[43][29:58, 29:58]), 0)
         x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, 43][29:58, 29:58]), 0)
         x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, : ,43][29:58, 29:58]), 0)
