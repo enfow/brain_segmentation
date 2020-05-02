@@ -1160,6 +1160,7 @@ class SegNet3DK5L4IdentCent(nn.Module):
                 self.cnn_layer_2d_patch_scale1[i] = self.cnn_layer_2d_patch_scale1[i].cuda()
                 self.cnn_layer_2d_patch_scale3[i] = self.cnn_layer_2d_patch_scale3[i].cuda()
             self.cnn_layer_3d_patch = self.cnn_layer_3d_patch.cuda()
+            self.centroid_identity_layer = self.centroid_identity_layer.cuda()
             self.fully_connected_layer = self.fully_connected_layer.cuda()
 
         print("MODEL : {}".format(self.name))
