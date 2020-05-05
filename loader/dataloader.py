@@ -179,13 +179,16 @@ class BrainSegmentationDataset3DCentroid(Dataset):
                 brain_data, 
                 valid_label,
                 present_label_list,
-                centroid_list=None
+                centroid_list=None,
+                is_test=False
                 ):
         self.brain_data = brain_data
         self.valid_label = valid_label
         self.centroid_list = centroid_list
         self.present_label_list = present_label_list
         print("NUM OF PATCHS : {}".format(len(valid_label)))
+
+        self.is_test = is_test
 
     def __len__(self):
         return len(self.valid_label)   # 이거 중요함... 이거 잘못 넣으면 출력되는 데이터 개수가 이상하게 나옴.
@@ -210,10 +213,12 @@ class BrainSegmentationDataset3DCentroid(Dataset):
         # x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[29:58, 29:58, 29:58]), 0)
         x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[37:50, 37:50, 37:50]), 0)
 
-        if self.centroid_list is None:
-            x["centroid"] = np.array([0 for i in range(len(self.present_label_list))])
-        else:
-            x["centroid"] = self.centroid_list[i].compute_scaled_distances([j,k,l])
+        x["centroid"] = self.centroid_list[i].compute_scaled_distances([j,k,l])
+        
+        if self.is_test:
+            print("centroid shp", x["centroid"].shape)
+            print("centroid head", x["centroid"][:20])
+            self.is_test = False
         
         y = self.valid_label[idx]["y_value"]
         
