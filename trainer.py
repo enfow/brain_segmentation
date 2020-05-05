@@ -4,12 +4,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from loader.dataloader import get_data, get_valid_voxel
 from loader.dataloader import BrainSegmentationDataset, BrainSegmentationDataset3D, BrainSegmentationDataset3DCentroid
 from loader.utils import return_label_dicts, get_valid_label
-from loader.centroid import get_centroid_list
+from loader.centroid import get_centroid_list, get_updated_centroid_list
 
 
 present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  33,  34,  35,  36,  37,     # add 33, 34
@@ -39,7 +40,7 @@ def define_argparser():
         '--seed', default=1, type=int
     )
     p.add_argument(
-        '--epochs', default=10, type=int
+        '--epochs', default=5, type=int
     )
     p.add_argument(
         '--lr', default=0.01, type=float
@@ -48,7 +49,10 @@ def define_argparser():
         '--batch_size', default=512, type=int
     )
     p.add_argument(
-        '--centroid', default=True, type=bool
+        '--centroid', default="y", type=str
+    )
+    p.add_argument(
+        '--save_img', default="y", type=str
     )
 
     config = p.parse_args()
@@ -58,7 +62,7 @@ def define_argparser():
 
 if __name__ == "__main__":
 
-    from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5, SegNet3DK5L4Cent
+    from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5, SegNet3DK5L4Cent, SegNet3DK5L4IdentCent
 
     import os
     os.environ['CUDA_VISIBLE_DEVICES']="2"
@@ -73,9 +77,19 @@ if __name__ == "__main__":
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    with_centroid = config.centroid
-    # print(config.centroid)
-    # with_centroid = False
+    if config.save_img == "y":
+        save_img = True
+    elif config.save_img == "n":
+        save_img = False
+    else :
+        raise ValueError("centroid config not known")
+
+    if config.centroid == "y":
+        with_centroid = True
+    elif config.centroid == "n":
+        with_centroid = False
+    else :
+        raise ValueError("centroid config not known")
     print("With CENTROID : {}".format(with_centroid))
     
     ### GET DATA ###
@@ -98,14 +112,16 @@ if __name__ == "__main__":
     test_data, test_label = get_data(test_dir, data_file=test_file, num_of_data=1, padding=43, get_test_set=False)
     test_label = get_valid_label(test_label, label_to_idx)
 
-
+    print("Number of unique label", len(np.unique(label.reshape(-1))))
+    print("Number unique test_label", len(np.unique(test_label.reshape(-1))))
 
     print("data shape : {}".format(data.shape) )
     print("test_data shape : {}".format(test_data.shape))
 
     if with_centroid :  ### WITH CENTROID ###
 
-        model = SegNet3DK5L4Cent(num_of_class=num_of_label, use_cuda=True)
+        # model = SegNet3DK5L4Cent(num_of_class=num_of_label, use_cuda=True)
+        model = SegNet3DK5L4IdentCent(num_of_class=num_of_label, use_cuda=True)
 
         dir_name = "{}_seed{}".format(model.name, seed)
 
@@ -113,6 +129,15 @@ if __name__ == "__main__":
             raise ValueError("Save Directory is Already Exist")
         else:
             os.mkdir(os.path.join('.', dir_name))
+
+        if save_img:
+            fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+            axarr[0].imshow(test_label[0][125][50:250, 100:300])
+            axarr[1].imshow(test_label[0][150][50:250, 100:300])
+            axarr[2].imshow(test_label[0][175][50:250, 100:300])
+            axarr[3].imshow(test_label[0][200][50:250, 100:300])
+            plt.savefig('./{}/test_label.png'.format(dir_name), dpi=200)
+            plt.close(fig)
 
         with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
             f.write("model : {}\n".format(model))
@@ -128,7 +153,7 @@ if __name__ == "__main__":
             # GET TRAINSET
             valid_voxel = get_valid_voxel(data, label, label_to_idx)
             data_centroid_list = get_centroid_list(label, present_label_list)
-            brain_dataset = BrainSegmentationDataset3DCentroid(data, valid_voxel, present_label_list, centroid_list=data_centroid_list)
+            brain_dataset = BrainSegmentationDataset3DCentroid(data, valid_voxel, present_label_list, centroid_list=data_centroid_list, is_test=True)
             brain_dataloader = DataLoader(brain_dataset, batch_size=config.batch_size, shuffle=True)
 
             test_valid_voxel = get_valid_voxel(test_data, test_label, label_to_idx)
@@ -169,6 +194,7 @@ if __name__ == "__main__":
             del output
             del x
             del y
+            print("CENTROID TRAIN) step : {} | loss : {}\n".format(step, loss_list[-1] ))
             f.write("CENTROID TRAIN) step : {} | loss : {}\n".format(step, loss_list[-1] ))
 
             # test dataloader to get initial centroid
@@ -203,14 +229,28 @@ if __name__ == "__main__":
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
             loss_func = nn.CrossEntropyLoss()
 
+            test_centroid_list = get_centroid_list(pred_test_label, present_label_list)
+
             step = 0   
             loss_list, acc_list = [], []
             for epoch in range(epochs):
 
+                if save_img:
+                    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+                    axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
+                    axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
+                    axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
+                    axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
+                    plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch), dpi=200)
+                    plt.close(fig)
+
                 # UPDATE TESTSET FOR CENTROID
-                test_centroid_list = get_centroid_list(pred_test_label, present_label_list)
-                test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_voxel, present_label_list, centroid_list=test_centroid_list)
-                test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
+                print("Number of pred_test_label", len(np.unique(pred_test_label.reshape(-1))))
+                f.write("Number of pred_test_label : {}\n".format(len(np.unique(pred_test_label.reshape(-1)))))
+                if epoch > 0:
+                    test_centroid_list = get_updated_centroid_list(pred_test_label, test_centroid_list)
+                test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_voxel, present_label_list, centroid_list=test_centroid_list, is_test=True)
+                test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size)
 
                 # train
                 for x, y in tqdm(brain_dataloader, desc="TRAIN) Epoch {} ".format(epoch+1)):
@@ -260,13 +300,12 @@ if __name__ == "__main__":
 
                 model.train()
 
-                print("ACCURACY HISTORY : {}".format(acc_list))
-                f.write("ACCURACY HISTORY : {}".format(acc_list))
+                print("ACCURACY HISTORY : {}\n".format(acc_list))
+                f.write("ACCURACY HISTORY : {}\n".format(acc_list))
 
 
     else :  ### WITHOUT CENTROID ###
 
-        # model = SegNet3DK5L3(num_of_class=num_of_label, use_cuda=True)
         model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True) 
 
         dir_name = "{}_seed{}".format(model.name, seed)
@@ -296,7 +335,7 @@ if __name__ == "__main__":
             # GET TESTSET
             test_valid_voxel = get_valid_voxel(test_data, test_label, label_to_idx)
             test_brain_dataset = BrainSegmentationDataset3D(test_data, test_valid_voxel)
-            test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
+            test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size)
 
             del data
             del label
@@ -351,25 +390,43 @@ if __name__ == "__main__":
                 # if epoch % 2 == 1:
                 model.eval()
                 count, accuracy = 0, 0
+                pred_test_label =np.zeros_like(test_label)
                 for test_data, test_labels in tqdm(test_brain_dataloader, desc="EVALUATION "):
+                    pred_idx = test_data["index"].reshape(-1, 4)
                     count += 1
                     test_output = model(test_data)
                     pred = torch.max(test_output, 1)[1].data.numpy()
                     accuracy += (float((pred == test_labels.data.numpy()).astype(int).sum()) / float(test_labels.size(0)))
+                    pred_re = pred.reshape(-1, 1)
+                    for i in range(pred_re.shape[0]):
+                        idx = pred_idx[i]
+                        pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
                     del test_data
                     del test_labels
-                    del test_output       
+                    del test_output
+                
+                if save_img:
+                    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+                    axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
+                    axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
+                    axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
+                    axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
+                    plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch), dpi=200)
+                    plt.close(fig)
+
+                print("Number of pred_test_label", len(np.unique(pred_test_label.reshape(-1))))
+                f.write("Number of pred_test_label : {}\n".format(len(np.unique(pred_test_label.reshape(-1)))))
 
                 print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch+1, step,  round( accuracy / count, 4)))
                 f.write("EVALUATION) Epoch : {} | step : {} | accuracy : {}\n".format(epoch+1, step,  round( accuracy / count, 4)))
                 acc_list.append(round(float(accuracy) / count, 4))
                 model.train()
 
-                print("ACCURACY HISTORY : {}".format(acc_list))
-                f.write("ACCURACY HISTORY : {}".format(acc_list))
+                print("ACCURACY HISTORY : {}\n".format(acc_list))
+                f.write("ACCURACY HISTORY : {}\n".format(acc_list))
 
 
-# seed 1 -> no centroid data 10 | test 2
-# seed 2 -> centroid data 10 | test 2
-# seed 3 -> no centroid data ALL | test 5
-# seed 6 -> no centroid data All | test 5
+# seed 1 -> centroid with identity for updated_centroid data ALL | test 5
+# seed 4 -> centroid with identity data ALL | test 5 
+# seed 5 -> centroid with identity for updated_centroid data 2 | test 2
+# seed 6 -> centroid with identity for updated_centroid data 2 | test 2
