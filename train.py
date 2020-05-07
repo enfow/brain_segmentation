@@ -23,7 +23,9 @@ def trainer (
     batch_size=512,
     lr=0.01,
     seed=-1,
+    use_tensorboard=False,
     save_img=True,
+    save_model=False
     ):
 
     if seed == -1:
@@ -184,6 +186,7 @@ def trainer (
             print()
             step = 0   
             loss_list, acc_list = [], []
+            average_loss_size = 1000
             for epoch in range(epochs):
 
                 # UPDATE TESTSET FOR CENTROID
@@ -203,8 +206,9 @@ def trainer (
                     loss.backward()
                     optimizer.step()
                     loss_list.append(round(float(loss.data), 4))
-                    if step % 2000 == 0:
-                        f.write("TRAIN) Epoch : {} | step : {} | loss : {}\n".format(epoch+1, step, loss_list[-1] ))
+                    if step % average_loss_size == 0:
+                        average_loss = round(np.sum(loss_list[-average_loss_size:])/average_loss_size, 4)
+                        f.write("TRAIN) Epoch : {} | step : {} | ave_loss : {}\n".format(epoch+1, step, average_loss ))
                     del output
                     del x
                     del y
@@ -213,12 +217,13 @@ def trainer (
 
                 # model save
                 # if epoch % 2 == 1:
-                torch.save({
-                    'epoch' : epoch+1,
-                    "model_state_dict" : model.state_dict(),
-                    "optimizer_state_dict" : optimizer.state_dict(),
-                    "loss" : loss,
-                }, "./{dir_name}/{model_name}_{epoch}_{seed}.pth".format(dir_name=dir_name, model_name=model.name, epoch=epoch+1, seed=seed))
+                if save_model:
+                    torch.save({
+                        'epoch' : epoch+1,
+                        "model_state_dict" : model.state_dict(),
+                        "optimizer_state_dict" : optimizer.state_dict(),
+                        "loss" : loss,
+                    }, "./{dir_name}/{model_name}_{epoch}_{seed}.pth".format(dir_name=dir_name, model_name=model.name, epoch=epoch+1, seed=seed))
 
                 # test
                 # if epoch % 2 == 1:
@@ -287,6 +292,7 @@ def trainer (
 
             step = 0
             loss_list, acc_list = [], []
+            average_loss_size = 1000
             for epoch in range(epochs):
                 # train
                 for x, y in tqdm(brain_dataloader, desc="TRAIN) Epoch {} ".format(epoch+1)):
@@ -297,9 +303,9 @@ def trainer (
                     loss.backward()
                     optimizer.step()
                     loss_list.append(round(float(loss.data), 4))
-                    if step % 2000 == 0:
-                        # print("TRAIN) Epoch : {} | step : {} | loss : {}".format(epoch+1, step, loss_list[-1] ))
-                        f.write("TRAIN) Epoch : {} | step : {} | loss : {}\n".format(epoch+1, step, loss_list[-1] ))
+                    if step % average_loss_size == 0:
+                        average_loss = round(np.sum(loss_list[-average_loss_size:])/average_loss_size, 4)
+                        f.write("TRAIN) Epoch : {} | step : {} | loss : {}\n".format(epoch+1, step, average_loss ))
                     del output
                     del x
                     del y
@@ -308,12 +314,13 @@ def trainer (
 
                 # model save
                 # if epoch % 2 == 1:
-                torch.save({
-                    'epoch' : epoch+1,
-                    "model_state_dict" : model.state_dict(),
-                    "optimizer_state_dict" : optimizer.state_dict(),
-                    "loss" : loss,
-                }, "./{dir_name}/{model_name}_{epoch}_{seed}.pth".format(dir_name=dir_name, model_name=model.name, epoch=epoch+1, seed=seed))
+                if save_model:
+                    torch.save({
+                        'epoch' : epoch+1,
+                        "model_state_dict" : model.state_dict(),
+                        "optimizer_state_dict" : optimizer.state_dict(),
+                        "loss" : loss,
+                    }, "./{dir_name}/{model_name}_{epoch}_{seed}.pth".format(dir_name=dir_name, model_name=model.name, epoch=epoch+1, seed=seed))
 
                 # test
                 # if epoch % 2 == 1:
