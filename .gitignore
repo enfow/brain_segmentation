@@ -1,6 +1,7 @@
 # vscode/ds_store
 .DS_Store
 .vscode/
+no_use/
 
 # Settings
 .env
@@ -22,3 +23,4 @@ Brebisson_Deep_Neural_Networks_2015_CVPR_paper.pdf
 # trained model and log
 *.pth
 *.txt
+trained_model/

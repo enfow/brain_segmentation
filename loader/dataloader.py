@@ -98,7 +98,8 @@ def get_valid_voxel(x, y, label_to_idx):
             valid_voxel.append(
                 {
                     "y_index" : [a_1[i],a_2[i],a_3[i],a_4[i]],
-                    "y_value" : label_to_idx[int(y[a_1[i]][a_2[i]][a_3[i]][a_4[i]])],
+                    # "y_value" : label_to_idx[int(y[a_1[i]][a_2[i]][a_3[i]][a_4[i]])],
+                    "y_value" : int(y[a_1[i]][a_2[i]][a_3[i]][a_4[i]]),
                 }
             )
     
@@ -107,8 +108,8 @@ def get_valid_voxel(x, y, label_to_idx):
 
 class BrainSegmentationDataset(Dataset):
 
-    def __init__(self,single_brain_data, valid_label):
-        self.single_brain_data = single_brain_data
+    def __init__(self,brain_data, valid_label):
+        self.brain_data = brain_data
         self.valid_label = valid_label
         print("NUM OF PATCHS : {}".format(len(valid_label)))
 
@@ -120,7 +121,7 @@ class BrainSegmentationDataset(Dataset):
         data_index = self.valid_label[idx]["y_index"]
         i, j, k, l = data_index[0], data_index[1], data_index[2], data_index[3]
 
-        sample = self.single_brain_data[i][j-43:j+44, k-43:k+44, l-43:l+44]
+        sample = self.brain_data[i][j-43:j+44, k-43:k+44, l-43:l+44]
         x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[43][29:58, 29:58]), 0)
         x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, 43][29:58, 29:58]), 0)
         x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, : ,43][29:58, 29:58]), 0)
@@ -138,8 +139,8 @@ class BrainSegmentationDataset(Dataset):
 
 class BrainSegmentationDataset3D(Dataset):
 
-    def __init__(self,single_brain_data, valid_label):
-        self.single_brain_data = single_brain_data
+    def __init__(self,brain_data, valid_label):
+        self.brain_data = brain_data
         self.valid_label = valid_label
         print("NUM OF PATCHS : {}".format(len(valid_label)))
 
@@ -152,7 +153,9 @@ class BrainSegmentationDataset3D(Dataset):
         data_index = self.valid_label[idx]["y_index"]
         i, j, k, l = data_index[0], data_index[1], data_index[2], data_index[3]
 
-        sample = self.single_brain_data[i][j-43:j+44, k-43:k+44, l-43:l+44]
+        sample = self.brain_data[i][j-43:j+44, k-43:k+44, l-43:l+44]
+        x["index"] = np.array([i,j,k,l])
+
         x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[43][29:58, 29:58]), 0)
         x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, 43][29:58, 29:58]), 0)
         x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, : ,43][29:58, 29:58]), 0)
@@ -163,6 +166,59 @@ class BrainSegmentationDataset3D(Dataset):
 
         # x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[29:58, 29:58, 29:58]), 0)
         x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[37:50, 37:50, 37:50]), 0)
+        
+        y = self.valid_label[idx]["y_value"]
+        
+        return (x, y)
+
+
+
+class BrainSegmentationDataset3DCentroid(Dataset):
+
+    def __init__(self,
+                brain_data, 
+                valid_label,
+                present_label_list,
+                centroid_list=None,
+                is_test=False
+                ):
+        self.brain_data = brain_data
+        self.valid_label = valid_label
+        self.centroid_list = centroid_list
+        self.present_label_list = present_label_list
+        print("NUM OF PATCHS : {}".format(len(valid_label)))
+
+        self.is_test = is_test
+
+    def __len__(self):
+        return len(self.valid_label)   # 이거 중요함... 이거 잘못 넣으면 출력되는 데이터 개수가 이상하게 나옴.
+
+    def __getitem__(self, idx):
+        x = {}
+
+        data_index = self.valid_label[idx]["y_index"]
+        i, j, k, l = data_index[0], data_index[1], data_index[2], data_index[3]
+
+        sample = self.brain_data[i][j-43:j+44, k-43:k+44, l-43:l+44]
+        x["index"] = np.array([i,j,k,l])
+
+        x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[43][29:58, 29:58]), 0)
+        x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, 43][29:58, 29:58]), 0)
+        x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, : ,43][29:58, 29:58]), 0)
+
+        x["patch_x_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[43]), 0)
+        x["patch_y_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, 43]), 0)
+        x["patch_z_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, :, 43]), 0)
+
+        # x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[29:58, 29:58, 29:58]), 0)
+        x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[37:50, 37:50, 37:50]), 0)
+
+        x["centroid"] = self.centroid_list[i].compute_scaled_distances([j,k,l])
+        
+        if self.is_test:
+            print("centroid shp", x["centroid"].shape)
+            print("centroid head", x["centroid"][:20])
+            self.is_test = False
         
         y = self.valid_label[idx]["y_value"]
         
