@@ -50,6 +50,9 @@ def define_argparser():
     p.add_argument(
         '--test_size', default=5, type=int
     )
+    p.add_argument(
+        '--noise_size', default=0.01, type=float
+    )
 
     config = p.parse_args()
 
@@ -58,7 +61,7 @@ def define_argparser():
 
 if __name__ == "__main__":
 
-    os.environ['CUDA_VISIBLE_DEVICES']="2"
+    os.environ['CUDA_VISIBLE_DEVICES']="1"
     config = define_argparser()
     if config.save_img == "y":
         save_img = True
@@ -77,7 +80,7 @@ if __name__ == "__main__":
                 num_of_class=num_of_label, 
                 use_centroid=True,
                 use_cuda=True,
-                noise_size=0.01
+                noise_size=config.noise_size
         )
 
         # centroid_model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True) 
@@ -86,7 +89,6 @@ if __name__ == "__main__":
                 num_of_class=num_of_label, 
                 use_centroid=False,
                 use_cuda=True,
-                noise_size=0.01
         )
 
         trainer (
@@ -99,7 +101,9 @@ if __name__ == "__main__":
                 batch_size=config.batch_size,
                 lr=config.lr,
                 seed=config.seed,
+                use_tensorboard=True,
                 save_img=save_img,
+                save_model=False,
                 )
 
     elif config.centroid == "n":
@@ -116,7 +120,9 @@ if __name__ == "__main__":
                 batch_size=config.batch_size,
                 lr=config.lr,
                 seed=config.seed,
-                save_img=save_img
+                use_tensorboard=True,
+                save_img=save_img,
+                save_model=False,
                 )
 
     else:
