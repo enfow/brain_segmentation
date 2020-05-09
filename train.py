@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import pickle
 
 from loader.dataloader import get_data, get_valid_voxel
 from loader.dataloader import BrainSegmentationDataset, BrainSegmentationDataset3D, BrainSegmentationDataset3DCentroid
@@ -50,6 +52,9 @@ def trainer (
     else:
         os.mkdir(os.path.join('.', dir_name))
 
+    if use_tensorboard:
+        writer = SummaryWriter(log_dir=os.path.join('.', 'runs', self.filename))
+
     with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
         
         f.write("model : {}\n".format(model))
@@ -84,13 +89,14 @@ def trainer (
         f.write("Number of test_label: {}\n".format(len(np.unique(test_label.reshape(-1)))))
 
         if save_img:
-            fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-            axarr[0].imshow(test_label[0][125][50:250, 100:300])
-            axarr[1].imshow(test_label[0][150][50:250, 100:300])
-            axarr[2].imshow(test_label[0][175][50:250, 100:300])
-            axarr[3].imshow(test_label[0][200][50:250, 100:300])
-            plt.savefig('./{}/test_label.png'.format(dir_name), dpi=200)
-            plt.close(fig)
+            save_label(test_label, "test_label")
+            # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+            # axarr[0].imshow(test_label[0][125][50:250, 100:300])
+            # axarr[1].imshow(test_label[0][150][50:250, 100:300])
+            # axarr[2].imshow(test_label[0][175][50:250, 100:300])
+            # axarr[3].imshow(test_label[0][200][50:250, 100:300])
+            # plt.savefig('./{}/test_label.png'.format(dir_name), dpi=200)
+            # plt.close(fig)
 
         if use_centroid:
 
@@ -160,13 +166,14 @@ def trainer (
                     pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
 
             if save_img:
-                fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-                axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
-                axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
-                axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
-                axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
-                plt.savefig('./{}/pred_test_label_init.png'.format(dir_name), dpi=200)
-                plt.close(fig)
+                save_label(pred_test_label, "pred_test_label_init")
+                # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+                # axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
+                # axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
+                # axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
+                # axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
+                # plt.savefig('./{}/pred_test_label_init.png'.format(dir_name), dpi=200)
+                # plt.close(fig)
 
             print("CENTROID EVALUATION) step : {} | accuracy : {}".format(step,  round( accuracy / count, 4)))
             f.write("CENTROID EVALUATION) step : {} | accuracy : {}\n".format(step,  round( accuracy / count, 4)))
@@ -242,13 +249,14 @@ def trainer (
                         pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
 
                 if save_img:
-                    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-                    axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
-                    axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
-                    axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
-                    axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
-                    plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch+1), dpi=200)
-                    plt.close(fig)
+                    save_label(pred_test_label, "pred_test_label")
+                    # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+                    # axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
+                    # axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
+                    # axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
+                    # axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
+                    # plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch+1), dpi=200)
+                    # plt.close(fig)
 
                 print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch+1, step,  round( accuracy / count, 4)))
                 f.write("EVALUATION) Epoch : {} | step : {} | accuracy : {}\n".format(epoch+1, step,  round( accuracy / count, 4)))
@@ -360,3 +368,16 @@ def trainer (
 
                 print("ACCURACY HISTORY : {}\n".format(acc_list))
                 f.write("ACCURACY HISTORY : {}\n".format(acc_list))
+
+
+def save_label(label_data, save_name):
+    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+    axarr[0].imshow(label_data[0][125][50:250, 100:300])
+    axarr[1].imshow(label_data[0][150][50:250, 100:300])
+    axarr[2].imshow(label_data[0][175][50:250, 100:300])
+    axarr[3].imshow(label_data[0][200][50:250, 100:300])
+    plt.savefig('./{}/{}_{}.png'.format(dir_name, save_name, epoch), dpi=200)
+    plt.close(fig)
+
+    with open("./{}/{}_{}.pkl".format(dir_name, save_name, epoch), 'wb') as f:
+        pickle.dump(label_data, f)
