@@ -53,7 +53,7 @@ def trainer (
         os.mkdir(os.path.join('.', dir_name))
 
     if use_tensorboard:
-        writer = SummaryWriter(log_dir=os.path.join('.', 'runs', self.filename))
+        writer = SummaryWriter(log_dir=os.path.join('.', 'runs', dir_name))
 
     with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
         
@@ -89,7 +89,7 @@ def trainer (
         f.write("Number of test_label: {}\n".format(len(np.unique(test_label.reshape(-1)))))
 
         if save_img:
-            save_label(test_label, "test_label")
+            save_label(test_label, dir_name, "test_label")
             # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
             # axarr[0].imshow(test_label[0][125][50:250, 100:300])
             # axarr[1].imshow(test_label[0][150][50:250, 100:300])
@@ -166,7 +166,7 @@ def trainer (
                     pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
 
             if save_img:
-                save_label(pred_test_label, "pred_test_label_init")
+                save_label(pred_test_label, dir_name, "pred_test_label_init")
                 # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
                 # axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
                 # axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
@@ -213,6 +213,8 @@ def trainer (
                     loss.backward()
                     optimizer.step()
                     loss_list.append(round(float(loss.data), 4))
+                    if use_tensorboard:
+                        writer.add_scalar("loss/train", round(float(loss.data), 4), step)
                     if step % average_loss_size == 0:
                         average_loss = round(np.sum(loss_list[-average_loss_size:])/average_loss_size, 4)
                         f.write("TRAIN) Epoch : {} | step : {} | ave_loss : {}\n".format(epoch+1, step, average_loss ))
@@ -249,7 +251,7 @@ def trainer (
                         pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
 
                 if save_img:
-                    save_label(pred_test_label, "pred_test_label")
+                    save_label(pred_test_label, dir_name, "pred_test_label", save_label=epoch+1)
                     # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
                     # axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
                     # axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
@@ -257,6 +259,9 @@ def trainer (
                     # axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
                     # plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch+1), dpi=200)
                     # plt.close(fig)
+
+                if use_tensorboard:
+                    writer.add_scalar("accuracy/test", round( accuracy / count, 4), epoch+1)
 
                 print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch+1, step,  round( accuracy / count, 4)))
                 f.write("EVALUATION) Epoch : {} | step : {} | accuracy : {}\n".format(epoch+1, step,  round( accuracy / count, 4)))
@@ -350,13 +355,14 @@ def trainer (
                     del test_output
                 
                 if save_img:
-                    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-                    axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
-                    axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
-                    axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
-                    axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
-                    plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch), dpi=200)
-                    plt.close(fig)
+                    save_label(pred_test_label, dir_name, "pred_test_label", save_label=epoch+1)
+                    # fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+                    # axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
+                    # axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
+                    # axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
+                    # axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
+                    # plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch), dpi=200)
+                    # plt.close(fig)
 
                 print("Number of pred_test_label", len(np.unique(pred_test_label.reshape(-1))))
                 f.write("Number of pred_test_label : {}\n".format(len(np.unique(pred_test_label.reshape(-1)))))
@@ -370,14 +376,19 @@ def trainer (
                 f.write("ACCURACY HISTORY : {}\n".format(acc_list))
 
 
-def save_label(label_data, save_name):
+def save_label(label_data, dir_name, save_name, save_label=None):
+    if save_label is not None:
+        save_name = "{}_{}".format(save_name, save_label)
+
     fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
     axarr[0].imshow(label_data[0][125][50:250, 100:300])
     axarr[1].imshow(label_data[0][150][50:250, 100:300])
     axarr[2].imshow(label_data[0][175][50:250, 100:300])
     axarr[3].imshow(label_data[0][200][50:250, 100:300])
-    plt.savefig('./{}/{}_{}.png'.format(dir_name, save_name, epoch), dpi=200)
+
+    plt.savefig('./{}/{}.png'.format(dir_name, save_name), dpi=200)
     plt.close(fig)
 
-    with open("./{}/{}_{}.pkl".format(dir_name, save_name, epoch), 'wb') as f:
+    with open("./{}/{}.pkl".format(dir_name, save_name), 'wb') as f:
         pickle.dump(label_data, f)
+        
