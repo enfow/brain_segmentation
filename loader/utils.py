@@ -29,7 +29,16 @@ def return_label_dicts(present_label_list):
 def return_new_label(l, label_to_idx):
     return label_to_idx[l]
 
+
 def get_valid_label(original_label, label_to_idx):
     vectorized_return_new_label = np.vectorize(return_new_label, otypes=[np.int])
 
     return vectorized_return_new_label(original_label, label_to_idx)
+
+
+def get_min_max_value(input_data):
+    return (input_data.min(), input_data.max())
+
+
+def min_max_scaler(input_data, min_value, max_value):
+    return (input_data - min_value) / (max_value - min_value)
