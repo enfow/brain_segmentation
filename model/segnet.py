@@ -903,10 +903,10 @@ class SegNet_CNN3D_FC7C1(nn.Module):
         )
 
 
-class SegNet_CNN22D_FC7C1(nn.Module):
+class SegNet_CNN21D_FC7C1(nn.Module):
 
     """
-    CNN22D - CNN 2 sharing layer + 2 layer with size D
+    CNN21D - CNN 2 sharing layer + 1 layer with size D
     FC7C - FC 7 layer with size C1
     """
 
@@ -917,12 +917,12 @@ class SegNet_CNN22D_FC7C1(nn.Module):
                 use_cuda=True,
                 noise_size=None
                 ):
-        super(SegNet_CNN22D_FC7C1, self).__init__()
+        super(SegNet_CNN21D_FC7C1, self).__init__()
 
         if num_of_class is None:
             raise ValueError("No no_of_class")
 
-        self.name = "SegNet_CNN22D_FC7C1"
+        self.name = "SegNet_CNN21D_FC7C1"
 
         self.use_cuda = use_cuda
         self.network_output_size = num_of_class
@@ -930,7 +930,7 @@ class SegNet_CNN22D_FC7C1(nn.Module):
         self.use_centroid = use_centroid
         self.noise_size = noise_size
 
-        self.cnn_output_size = (13 ** 2) * 6 + (7 ** 3)
+        self.cnn_output_size = (17 ** 2) * 6 + (7 ** 3)
         if self.use_centroid:
             self.cnn_output_size += num_of_class
 
@@ -1060,13 +1060,9 @@ class SegNet_CNN22D_FC7C1(nn.Module):
         return x
 
     def get_2d_patch_network(self):
-        # outputsize = (29 -4 - 4 - 4 - 4 ) = 13
+        # outputsize = (29 -4 - 4 - 4) = 13
         return nn.Sequential(
-            nn.Conv2d( in_channels=32, out_channels=8, kernel_size=5, stride=1, padding=0),
-            nn.BatchNorm2d(8),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d( in_channels=8, out_channels=1, kernel_size=5, stride=1, padding=0),
+            nn.Conv2d( in_channels=32, out_channels=1, kernel_size=5, stride=1, padding=0),
             nn.ReLU(inplace=True),
         )
 
