@@ -2,7 +2,7 @@ import os
 import argparse
 
 # from model.tested_model import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5, SegNet3DK5L4Cent, SegNet3DK5L4IdentCent, SegNet3DK5L4IdentCentLargeFC
-from model.segnet import SegNet_CNN4A_FC6C, SegNet_CNN2A_FC6C, SegNet_CNN3C_FC6C
+from model.segnet import SegNet_CNN4A_FC6C, SegNet_CNN2A_FC6C, SegNet_CNN3C_FC6C, SegNet_CNN4D_FC5C, SegNet_CNN3D_FC7C1, SegNet_CNN21D_FC7C1
 from train import trainer
 
 
@@ -42,7 +42,7 @@ def define_argparser():
         '--centroid', default="y", type=str
     )
     p.add_argument(
-        '--save_img', default="y", type=str
+        '--centroid_iter', default=1, type=int
     )
     p.add_argument(
         '--train_size', default=None, type=int
@@ -53,6 +53,12 @@ def define_argparser():
     p.add_argument(
         '--noise_size', default=0.01, type=float
     )
+    p.add_argument(
+        '--save_img', default="y", type=str
+    )
+    p.add_argument(
+        '--tensorboard', default="y", type=str
+    )
 
     config = p.parse_args()
 
@@ -61,31 +67,34 @@ def define_argparser():
 
 if __name__ == "__main__":
 
-    os.environ['CUDA_VISIBLE_DEVICES']="1"
+    os.environ['CUDA_VISIBLE_DEVICES']="2"
     config = define_argparser()
     if config.save_img == "y":
         save_img = True
     else:
         save_img = False
+    if config.tensorboard == "y":
+        tensorboard = True
+    else:
+        tensorboard = False
     if config.centroid == "y":
 
-        # model = SegNet3DK5L4Cent(num_of_class=num_of_label, use_cuda=True)
-        # model = SegNet3DK5L4IdentCent(num_of_class=num_of_label, use_cuda=True)
-        # model = SegNet3DK5L4IdentCentLargeFC(num_of_class=num_of_label, use_cuda=True)
-        # model = SegNet3DK5L2IdentCentLargeFC(num_of_class=num_of_label, use_cuda=True)
-        # model = SegNet3DK5L2IdentCentLargeChanneLargeFC(num_of_class=num_of_label, use_cuda=True)
-        # model = SegNet3DK5L2IdentCentNoiseLargeChanneLargeFC(num_of_class=num_of_label, use_cuda=True)
+        # SegNet_CNN3C_FC6C
+        # SegNet_CNN4D_FC5C
+        # SegNet_CNN4D_FC5C
 
-        model = SegNet_CNN3C_FC6C(
+        # SegNet_CNN4D_FC7C1
+        # SegNet_CNN3D_FC7C1
+        # SegNet_CNN3D_FC7C1
+        # SegNet_CNN22D_FC7C1
+        model = SegNet_CNN21D_FC7C1(
                 num_of_class=num_of_label, 
                 use_centroid=True,
                 use_cuda=True,
                 noise_size=config.noise_size
         )
 
-        # centroid_model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True) 
-        # centroid_model = SegNet3DK5L3LargeChannelLargeFC(num_of_class=num_of_label, use_cuda=True) 
-        centroid_model = SegNet_CNN3C_FC6C(
+        centroid_model = SegNet_CNN21D_FC7C1(
                 num_of_class=num_of_label, 
                 use_centroid=False,
                 use_cuda=True,
@@ -96,12 +105,13 @@ if __name__ == "__main__":
                 test_size=config.test_size,
                 model=model,
                 centroid_model=centroid_model,
+                centroid_iter=config.centroid_iter,
                 present_label_list=present_label_list,
                 epochs=config.epochs,
                 batch_size=config.batch_size,
                 lr=config.lr,
                 seed=config.seed,
-                use_tensorboard=True,
+                use_tensorboard=tensorboard,
                 save_img=save_img,
                 save_model=False,
                 )
@@ -120,7 +130,7 @@ if __name__ == "__main__":
                 batch_size=config.batch_size,
                 lr=config.lr,
                 seed=config.seed,
-                use_tensorboard=True,
+                use_tensorboard=tensorboard,
                 save_img=save_img,
                 save_model=False,
                 )
