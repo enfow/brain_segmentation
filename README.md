@@ -2,6 +2,7 @@
 
 - python 3.7.4
 - pytorch
+- [paper_review](https://enfow.github.io/paper-review/segmentation/2020/04/01/deep_neural_networks_for_anatomical_brain_segmentation/)
 
 ## Architecture
 
