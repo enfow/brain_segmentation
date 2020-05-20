@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import pickle
 
 from loader.dataloader import get_data, get_valid_voxel
 from loader.dataloader import BrainSegmentationDataset, BrainSegmentationDataset3D, BrainSegmentationDataset3DCentroid
@@ -18,6 +20,7 @@ def trainer (
     test_size=5,
     model=None,
     centroid_model=None,
+    centroid_iter=1,
     present_label_list=None,
     epochs=5,
     batch_size=512,
@@ -31,6 +34,9 @@ def trainer (
     if seed == -1:
         seed = np.random.randint(9999)
 
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
     if model is None:
         raise ValueError("No model")
 
@@ -43,12 +49,26 @@ def trainer (
     if present_label_list is None:
         raise ValueError("No present_label_list")
 
-    dir_name = "{}_seed{}".format(model.name, seed)
+    if train_size is None:
+        dsize = "f"
+    else:
+        dsize = train_size
+    dir_name = "{}_dsize_{}_citer{}_batch{}_seed{}".format(model.name, dsize, centroid_iter, batch_size, seed)
 
     if os.path.exists(os.path.join('.', dir_name)):
         raise ValueError("Save Directory is Already Exist")
     else:
         os.mkdir(os.path.join('.', dir_name))
+
+    if use_tensorboard:
+        writer = SummaryWriter(log_dir=os.path.join('.', 'runs', dir_name))
+        writer.add_hparams({
+            "seed" : seed,
+            "lr" : lr,
+            "centroid_iter" : centroid_iter,
+            "train_size" : dsize,
+            "batch_size" : batch_size
+            },{})
 
     with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
         
@@ -65,7 +85,13 @@ def trainer (
         # get train dataset
         print()
         print("GET TRAIN DATA")
-        data, label = get_data(data_dir, data_file=data_file, num_of_data=train_size, padding=43, get_test_set=False)
+        data, label, min_value, max_value = get_data(
+            data_dir, 
+            data_file=data_file, 
+            num_of_data=train_size, 
+            padding=43, 
+            get_test_set=False
+            )
         label = get_valid_label(label, label_to_idx)
         print("train_data shape: {}".format(data.shape) )
         print("Number of train_label: {}".format(len(np.unique(label.reshape(-1)))))
@@ -75,7 +101,15 @@ def trainer (
         # get test dataset
         print() 
         print("GET TEST DATA")
-        test_data, test_label = get_data(test_dir, data_file=test_file, num_of_data=test_size, padding=43, get_test_set=False)
+        test_data, test_label, _, _ = get_data(
+            test_dir, 
+            data_file=test_file, 
+            num_of_data=test_size, 
+            padding=43, 
+            get_test_set=False,
+            min_value=min_value, 
+            max_value=max_value
+            )
         test_label = get_valid_label(test_label, label_to_idx)
 
         print("test_data shape: {}".format(test_data.shape))
@@ -84,13 +118,7 @@ def trainer (
         f.write("Number of test_label: {}\n".format(len(np.unique(test_label.reshape(-1)))))
 
         if save_img:
-            fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-            axarr[0].imshow(test_label[0][125][50:250, 100:300])
-            axarr[1].imshow(test_label[0][150][50:250, 100:300])
-            axarr[2].imshow(test_label[0][175][50:250, 100:300])
-            axarr[3].imshow(test_label[0][200][50:250, 100:300])
-            plt.savefig('./{}/test_label.png'.format(dir_name), dpi=200)
-            plt.close(fig)
+            save_label(test_label, dir_name, "test_label")
 
         if use_centroid:
 
@@ -160,13 +188,7 @@ def trainer (
                     pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
 
             if save_img:
-                fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-                axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
-                axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
-                axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
-                axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
-                plt.savefig('./{}/pred_test_label_init.png'.format(dir_name), dpi=200)
-                plt.close(fig)
+                save_label(pred_test_label, dir_name, "pred_test_label_init")
 
             print("CENTROID EVALUATION) step : {} | accuracy : {}".format(step,  round( accuracy / count, 4)))
             f.write("CENTROID EVALUATION) step : {} | accuracy : {}\n".format(step,  round( accuracy / count, 4)))
@@ -185,6 +207,7 @@ def trainer (
 
             print()
             step = 0   
+            centroid_step = 0
             loss_list, acc_list = [], []
             average_loss_size = 1000
             for epoch in range(epochs):
@@ -192,10 +215,10 @@ def trainer (
                 # UPDATE TESTSET FOR CENTROID
                 print("Number of pred_test_label", len(np.unique(pred_test_label.reshape(-1))))
                 f.write("Number of pred_test_label : {}\n".format(len(np.unique(pred_test_label.reshape(-1)))))
-                if epoch > 0:
-                    test_centroid_list = get_updated_centroid_list(pred_test_label, test_centroid_list)
-                test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_voxel, present_label_list, centroid_list=test_centroid_list, is_test=True)
-                test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=batch_size)
+                # if epoch > 0:
+                #     test_centroid_list = get_updated_centroid_list(pred_test_label, test_centroid_list)
+                # test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_voxel, present_label_list, centroid_list=test_centroid_list, is_test=True)
+                # test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=batch_size)
 
                 # train
                 for x, y in tqdm(brain_dataloader, desc="TRAIN) Epoch {} ".format(epoch+1)):
@@ -206,6 +229,8 @@ def trainer (
                     loss.backward()
                     optimizer.step()
                     loss_list.append(round(float(loss.data), 4))
+                    if use_tensorboard:
+                        writer.add_scalar("loss/train", round(float(loss.data), 4), step)
                     if step % average_loss_size == 0:
                         average_loss = round(np.sum(loss_list[-average_loss_size:])/average_loss_size, 4)
                         f.write("TRAIN) Epoch : {} | step : {} | ave_loss : {}\n".format(epoch+1, step, average_loss ))
@@ -229,30 +254,35 @@ def trainer (
                 # if epoch % 2 == 1:
                 model.eval()
                 count, accuracy = 0, 0
-                pred_test_label =np.zeros_like(test_label)
-                for test_x, test_y in tqdm(test_brain_dataloader, desc="EVALUATION "):
-                    pred_idx = test_x["index"].reshape(-1, 4)
-                    count += 1
-                    test_output = model(test_x)
-                    pred = torch.max(test_output, 1)[1].data.numpy()
-                    accuracy += (float((pred == test_y.data.numpy()).astype(int).sum()) / float(test_y.size(0)))
-                    pred_re = pred.reshape(-1, 1)
-                    for i in range(pred_re.shape[0]):
-                        idx = pred_idx[i]
-                        pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
+                for cent_iter in range(centroid_iter):
+                    centroid_step += 1
+                    if (epoch > 0) or (cent_iter > 0):
+                        test_centroid_list = get_updated_centroid_list(pred_test_label, test_centroid_list)
+                    test_brain_dataset = BrainSegmentationDataset3DCentroid(test_data, test_valid_voxel, present_label_list, centroid_list=test_centroid_list, is_test=True)
+                    test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=batch_size)
 
-                if save_img:
-                    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-                    axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
-                    axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
-                    axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
-                    axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
-                    plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch+1), dpi=200)
-                    plt.close(fig)
+                    pred_test_label =np.zeros_like(test_label)
+                    for test_x, test_y in tqdm(test_brain_dataloader, desc="EVALUATION "):
+                        pred_idx = test_x["index"].reshape(-1, 4)
+                        count += 1
+                        test_output = model(test_x)
+                        pred = torch.max(test_output, 1)[1].data.numpy()
+                        accuracy += (float((pred == test_y.data.numpy()).astype(int).sum()) / float(test_y.size(0)))
+                        pred_re = pred.reshape(-1, 1)
+                        for i in range(pred_re.shape[0]):
+                            idx = pred_idx[i]
+                            pred_test_label[idx[0],idx[1],idx[2],idx[3]] = pred_re[i]
 
-                print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch+1, step,  round( accuracy / count, 4)))
-                f.write("EVALUATION) Epoch : {} | step : {} | accuracy : {}\n".format(epoch+1, step,  round( accuracy / count, 4)))
-                acc_list.append(round(float(accuracy) / count, 4))
+                    if save_img:
+                        save_number = "{}_{}".format(epoch+1, centroid_step)
+                        save_label(pred_test_label, dir_name, "pred_test_label", save_label=save_number)
+
+                    if use_tensorboard:
+                        writer.add_scalar("accuracy/test", round( accuracy / count, 4), centroid_step)
+
+                    print("EVALUATION) Epoch : {} | step : {} | centroid_iter : {} | accuracy : {}".format(epoch+1, step, centroid_step, round( accuracy / count, 4)))
+                    f.write("EVALUATION) Epoch : {} | step : {} | centroid_iter : {} | accuracy : {}\n".format(epoch+1, step, centroid_step, round( accuracy / count, 4)))
+                    acc_list.append(round(float(accuracy) / count, 4))
 
                 model.train()
 
@@ -342,13 +372,7 @@ def trainer (
                     del test_output
                 
                 if save_img:
-                    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
-                    axarr[0].imshow(pred_test_label[0][125][50:250, 100:300])
-                    axarr[1].imshow(pred_test_label[0][150][50:250, 100:300])
-                    axarr[2].imshow(pred_test_label[0][175][50:250, 100:300])
-                    axarr[3].imshow(pred_test_label[0][200][50:250, 100:300])
-                    plt.savefig('./{}/pred_test_label_{}.png'.format(dir_name, epoch), dpi=200)
-                    plt.close(fig)
+                    save_label(pred_test_label, dir_name, "pred_test_label", save_label=epoch+1)
 
                 print("Number of pred_test_label", len(np.unique(pred_test_label.reshape(-1))))
                 f.write("Number of pred_test_label : {}\n".format(len(np.unique(pred_test_label.reshape(-1)))))
@@ -360,3 +384,21 @@ def trainer (
 
                 print("ACCURACY HISTORY : {}\n".format(acc_list))
                 f.write("ACCURACY HISTORY : {}\n".format(acc_list))
+
+
+def save_label(label_data, dir_name, save_name, save_label=None):
+    if save_label is not None:
+        save_name = "{}_{}".format(save_name, save_label)
+
+    fig, axarr = plt.subplots(1,4, figsize=(35,25)) 
+    axarr[0].imshow(label_data[0][125][50:250, 100:300])
+    axarr[1].imshow(label_data[0][150][50:250, 100:300])
+    axarr[2].imshow(label_data[0][175][50:250, 100:300])
+    axarr[3].imshow(label_data[0][200][50:250, 100:300])
+
+    plt.savefig('./{}/{}.png'.format(dir_name, save_name), dpi=200)
+    plt.close(fig)
+
+    with open("./{}/{}.pkl".format(dir_name, save_name), 'wb') as f:
+        pickle.dump(label_data, f)
+        

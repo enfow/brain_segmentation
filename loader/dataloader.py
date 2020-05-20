@@ -2,11 +2,12 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from sklearn.preprocessing import MinMaxScaler
+# from sklearn.preprocessing import MinMaxScaler
 from skimage.io import imread
 import nibabel as nib
 
 from loader.utils import return_largest_size, add_zero_padding_with_shape, return_label_dicts
+from loader.utils import get_min_max_value, min_max_scaler
 
 
 def get_data(
@@ -14,7 +15,9 @@ def get_data(
             data_file=None, 
             num_of_data=None, 
             padding=0, 
-            get_test_set=False
+            get_test_set=False,
+            min_value=None, 
+            max_value=None
             ):
 
     """
@@ -39,8 +42,8 @@ def get_data(
 
     ### MAKE DATA AS SINGLE NDARRAY ###
 
-    data_list = [np.array(nib.load(data).dataobj).astype(np.float32) for data in nii_files]
-    label_list = [np.array(nib.load(data).dataobj).astype(np.float32) for data in glm_files]
+    data_list = [np.array(nib.load(data).dataobj).astype(np.uint16) for data in nii_files]
+    label_list = [np.array(nib.load(data).dataobj).astype(np.uint16) for data in glm_files]
 
     if isinstance(num_of_data, int):
         data_list = data_list[:num_of_data + 1]
@@ -59,31 +62,15 @@ def get_data(
     ### PREPROCESSING ###
 
     # MinMaxScaler
-    for num_of_data in range(data.shape[0]):
-        scaler = MinMaxScaler()
-        for i in range(data[num_of_data].shape[0]):
-            scaler.partial_fit(data[num_of_data][i])
-        for j in range(data[num_of_data].shape[0]):
-            data[num_of_data][j]=scaler.transform(data[num_of_data][j])
+    if (max_value is None) and (min_value is None):
+        min_value, max_value = get_min_max_value(data)
+    data = min_max_scaler(data, min_value, max_value)
 
-    if get_test_set :
-        train_set, train_label = data[:-1], label[:-1]
-        test_set, test_label = np.array([data[-1]]), np.array([label[-1]])
-        del data
-        del label
-        del data_list
-        del label_list
+    data, label = data[:-1], label[:-1]
+    del data_list
+    del label_list
 
-        return train_set, train_label, test_set, test_label
-
-    else : 
-        train_set, train_label = data[:-1], label[:-1]
-        del data
-        del label
-        del data_list
-        del label_list
-
-        return train_set, train_label
+    return data, label, min_value, max_value
 
 
 
@@ -98,7 +85,6 @@ def get_valid_voxel(x, y, label_to_idx):
             valid_voxel.append(
                 {
                     "y_index" : [a_1[i],a_2[i],a_3[i],a_4[i]],
-                    # "y_value" : label_to_idx[int(y[a_1[i]][a_2[i]][a_3[i]][a_4[i]])],
                     "y_value" : int(y[a_1[i]][a_2[i]][a_3[i]][a_4[i]]),
                 }
             )
@@ -129,8 +115,6 @@ class BrainSegmentationDataset(Dataset):
         x["patch_x_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[43]), 0)
         x["patch_y_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, 43]), 0)
         x["patch_z_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, :, 43]), 0)
-        
-        # x["centroid"] = self.centroid.compute_scaled_distances(sample["y_index"])
         
         y = self.valid_label[idx]["y_value"]
         
@@ -164,7 +148,6 @@ class BrainSegmentationDataset3D(Dataset):
         x["patch_y_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, 43]), 0)
         x["patch_z_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, :, 43]), 0)
 
-        # x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[29:58, 29:58, 29:58]), 0)
         x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[37:50, 37:50, 37:50]), 0)
         
         y = self.valid_label[idx]["y_value"]
@@ -210,7 +193,6 @@ class BrainSegmentationDataset3DCentroid(Dataset):
         x["patch_y_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, 43]), 0)
         x["patch_z_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, :, 43]), 0)
 
-        # x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[29:58, 29:58, 29:58]), 0)
         x["patch_3d"] = torch.unsqueeze(torch.from_numpy(sample[37:50, 37:50, 37:50]), 0)
 
         x["centroid"] = self.centroid_list[i].compute_scaled_distances([j,k,l])
