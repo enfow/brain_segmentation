@@ -2,7 +2,7 @@ import os
 import argparse
 
 # from model.tested_model import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5, SegNet3DK5L4Cent, SegNet3DK5L4IdentCent, SegNet3DK5L4IdentCentLargeFC
-from model.segnet import SegNet_CNN4A_FC6C, SegNet_CNN2A_FC6C, SegNet_CNN3C_FC6C, SegNet_CNN4D_FC5C, SegNet_CNN3D_FC7C1, SegNet_CNN21D_FC7C1
+from model.segnet import SegNet_CNN4A_FC6C, SegNet_CNN2A_FC6C, SegNet_CNN3C_FC6C, SegNet_CNN4D_FC5C, SegNet_CNN3D_FC7C1, SegNet_CNN21D_FC7C1, SegNetOnPaper, SegNetOnPaperNoPool, SegNetOnPaperReplaceCNN
 from train import trainer
 
 
@@ -30,7 +30,7 @@ def define_argparser():
         '--seed', default=-1, type=int
     )
     p.add_argument(
-        '--epochs', default=5, type=int
+        '--epochs', default=10, type=int
     )
     p.add_argument(
         '--lr', default=0.01, type=float
@@ -48,7 +48,7 @@ def define_argparser():
         '--train_size', default=None, type=int
     )
     p.add_argument(
-        '--test_size', default=5, type=int
+        '--test_size', default=None, type=int
     )
     p.add_argument(
         '--noise_size', default=0.01, type=float
@@ -67,7 +67,7 @@ def define_argparser():
 
 if __name__ == "__main__":
 
-    os.environ['CUDA_VISIBLE_DEVICES']="2"
+    os.environ['CUDA_VISIBLE_DEVICES']="1"
     config = define_argparser()
     if config.save_img == "y":
         save_img = True
@@ -87,14 +87,18 @@ if __name__ == "__main__":
         # SegNet_CNN3D_FC7C1
         # SegNet_CNN3D_FC7C1
         # SegNet_CNN22D_FC7C1
-        model = SegNet_CNN21D_FC7C1(
+        # SegNet_CNN21D_FC7C1
+        # SegNetOnPaper
+        # SegNetOnPaperNoPool
+        # SegNetOnPaperReplaceCNN
+        model = SegNetOnPaperNoPool(
                 num_of_class=num_of_label, 
                 use_centroid=True,
                 use_cuda=True,
                 noise_size=config.noise_size
         )
 
-        centroid_model = SegNet_CNN21D_FC7C1(
+        centroid_model = SegNetOnPaperNoPool(
                 num_of_class=num_of_label, 
                 use_centroid=False,
                 use_cuda=True,

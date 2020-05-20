@@ -1234,13 +1234,338 @@ class SegNetOnPaper(nn.Module):
         # outputsize = 13 - 3 / 2 - 3 = 2
         return nn.Sequential(
 
-            nn.Conv3d( in_channels=1, out_channels=64, kernel_size=4, stride=1, padding=0),
-            nn.BatchNorm3d(64),
+            nn.Conv3d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm3d(32),
             nn.ReLU(inplace=True),
 
             nn.MaxPool3d(2),
 
-            nn.Conv3d(in_channels=16, out_channels=1, kernel_size=4, stride=1, padding=0),
+            nn.Conv3d(in_channels=32, out_channels=1, kernel_size=4, stride=1, padding=0),
+            nn.ReLU(inplace=True)
+
+        )
+
+
+
+class SegNetOnPaperNoPool(nn.Module):
+
+    """
+    SegNet: https://arxiv.org/abs/1502.02445
+    CNN - Kernel size 5 X 5 + 2 X 2 maxpooling + Kernel size 5 X 5 +  2 X 2 maxpooling
+    NoPool - drop pooling layer from patch cnn
+    CENTROID - NOISE + 1 Identity
+    FC - 3000 + 3000 + label
+    """
+
+    def __init__(
+                self, 
+                num_of_class=None, 
+                use_centroid=True,
+                use_cuda=True,
+                noise_size=None
+                ):
+        super(SegNetOnPaperNoPool, self).__init__()
+
+        if num_of_class is None:
+            raise ValueError("No no_of_class")
+
+        self.name = "SegNetOnPaperNoPool"
+
+        self.use_cuda = use_cuda
+        self.network_output_size = num_of_class
+
+        self.use_centroid = use_centroid
+        self.noise_size = noise_size
+
+        self.cnn_output_size = (23 ** 2) * 6 + (7 ** 3)
+        if self.use_centroid:
+            self.cnn_output_size += num_of_class
+
+        self.cnn_sharing_layer_patch_1_network = nn.Sequential(
+            nn.Conv2d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            )
+
+        self.cnn_sharing_layer_patch_3_network = nn.Sequential(
+            nn.MaxPool2d(3),
+
+            nn.Conv2d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            )
+
+        self.cnn_layers =[
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(),
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(),
+            self.get_3d_patch_network(),
+        ]
+
+        self.centroid_identity_layer = nn.Sequential(
+            nn.Linear(num_of_class, num_of_class),
+            nn.BatchNorm1d(num_of_class), 
+            nn.ReLU(inplace=True),
+        )
+
+        self.fully_connected_layer = nn.Sequential(
+            nn.Linear(self.cnn_output_size, 3000),
+            nn.BatchNorm1d(3000), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(3000, 3000),
+            nn.BatchNorm1d(3000), 
+            nn.ReLU(inplace=True),
+            ) 
+
+        if self.use_cuda:
+            for i in range(len(self.cnn_layers)):
+                self.cnn_layers[i] = self.cnn_layers[i].cuda()
+            self.cnn_sharing_layer_patch_1_network = self.cnn_sharing_layer_patch_1_network.cuda()
+            self.cnn_sharing_layer_patch_3_network = self.cnn_sharing_layer_patch_3_network.cuda()
+            self.centroid_identity_layer = self.centroid_identity_layer.cuda()
+            self.fully_connected_layer = self.fully_connected_layer.cuda()
+
+        print("MODEL : {}".format(self.name))
+    
+    def forward(self, input_value):
+
+        if self.use_cuda:
+            cnn_input_list = [
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_x_scale_1"].float().cuda()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_y_scale_1"].float().cuda()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_z_scale_1"].float().cuda()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_x_scale_3"].float().cuda()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_y_scale_3"].float().cuda()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_z_scale_3"].float().cuda()),
+                input_value["patch_3d"].float().cuda()
+            ]
+
+        else:
+            cnn_input_list = [
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_x_scale_1"].float()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_y_scale_1"].float()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_z_scale_1"].float()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_x_scale_3"].float()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_y_scale_3"].float()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_z_scale_3"].float()),
+                input_value["patch_3d"].float()
+            ]
+
+        cnn_outputs=[]
+        for idx, data in enumerate(cnn_input_list):
+            output = self.cnn_layers[idx](data)
+            output = output.view(output.size(0), -1)
+            cnn_outputs.append(output)
+
+        if self.use_centroid:
+            if self.use_cuda:
+                centroid = input_value["centroid"].float().cuda()
+            else:
+                centroid = input_value["centroid"].float()
+            if isinstance(self.noise_size, float):
+                noise_of_centroid = (torch.randn_like(centroid) * self.noise_size)
+                centroid = (centroid + noise_of_centroid).clamp(0,1)
+
+            centroid_output = self.centroid_identity_layer(centroid)
+            cnn_outputs.append(centroid_output.view(centroid_output.size(0), -1))
+
+        x = torch.cat(cnn_outputs, 1)
+
+        x = self.fully_connected_layer(x)
+
+        if self.use_cuda:
+            x = x.cpu()
+
+        return x
+
+    def get_2d_patch_network(self):
+        # outputsize = 29 - 3 - 3 -> 23
+        return nn.Sequential(
+            nn.Conv2d( in_channels=32, out_channels=1, kernel_size=4, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+        )
+
+    def get_3d_patch_network(self):
+        # outputsize = 13 - 3 - 3 = 7
+        return nn.Sequential(
+
+            nn.Conv3d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm3d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv3d(in_channels=32, out_channels=1, kernel_size=4, stride=1, padding=0),
+            nn.ReLU(inplace=True)
+
+        )
+
+
+class SegNetOnPaperReplaceCNN(nn.Module):
+
+    """
+    SegNet: https://arxiv.org/abs/1502.02445
+    CNN - Kernel size 5 X 5 + 2 X 2 maxpooling + Kernel size 5 X 5 +  2 X 2 maxpooling
+    ReplaceCNN - drop pooling layer and replace with cnn
+    CENTROID - NOISE + 1 Identity
+    FC - 3000 + 3000 + label
+    """
+
+    def __init__(
+                self, 
+                num_of_class=None, 
+                use_centroid=True,
+                use_cuda=True,
+                noise_size=None
+                ):
+        super(SegNetOnPaperReplaceCNN, self).__init__()
+
+        if num_of_class is None:
+            raise ValueError("No no_of_class")
+
+        self.name = "SegNetOnPaperReplaceCNN"
+
+        self.use_cuda = use_cuda
+        self.network_output_size = num_of_class
+
+        self.use_centroid = use_centroid
+        self.noise_size = noise_size
+
+        self.cnn_output_size = (5 ** 2) * 6 + (2 ** 3)
+        if self.use_centroid:
+            self.cnn_output_size += num_of_class
+
+        self.cnn_sharing_layer_patch_1_network = nn.Sequential(
+            nn.Conv2d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d( in_channels=32, out_channels=32, kernel_size=2, stride=2, padding=0),
+            nn.ReLU(inplace=True),
+            )
+
+        self.cnn_sharing_layer_patch_3_network = nn.Sequential(
+            nn.MaxPool2d(3),
+
+            nn.Conv2d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d( in_channels=32, out_channels=32, kernel_size=2, stride=2, padding=0),
+            nn.ReLU(inplace=True),
+            )
+
+        self.cnn_layers =[
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(),
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(), 
+            self.get_2d_patch_network(),
+            self.get_3d_patch_network(),
+        ]
+
+        self.centroid_identity_layer = nn.Sequential(
+            nn.Linear(num_of_class, num_of_class),
+            nn.BatchNorm1d(num_of_class), 
+            nn.ReLU(inplace=True),
+        )
+
+        self.fully_connected_layer = nn.Sequential(
+            nn.Linear(self.cnn_output_size, 3000),
+            nn.BatchNorm1d(3000), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(3000, 3000),
+            nn.BatchNorm1d(3000), 
+            nn.ReLU(inplace=True),
+            ) 
+
+        if self.use_cuda:
+            for i in range(len(self.cnn_layers)):
+                self.cnn_layers[i] = self.cnn_layers[i].cuda()
+            self.cnn_sharing_layer_patch_1_network = self.cnn_sharing_layer_patch_1_network.cuda()
+            self.cnn_sharing_layer_patch_3_network = self.cnn_sharing_layer_patch_3_network.cuda()
+            self.centroid_identity_layer = self.centroid_identity_layer.cuda()
+            self.fully_connected_layer = self.fully_connected_layer.cuda()
+
+        print("MODEL : {}".format(self.name))
+    
+    def forward(self, input_value):
+
+        if self.use_cuda:
+            cnn_input_list = [
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_x_scale_1"].float().cuda()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_y_scale_1"].float().cuda()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_z_scale_1"].float().cuda()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_x_scale_3"].float().cuda()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_y_scale_3"].float().cuda()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_z_scale_3"].float().cuda()),
+                input_value["patch_3d"].float().cuda()
+            ]
+
+        else:
+            cnn_input_list = [
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_x_scale_1"].float()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_y_scale_1"].float()),
+                self.cnn_sharing_layer_patch_1_network(input_value["patch_z_scale_1"].float()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_x_scale_3"].float()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_y_scale_3"].float()),
+                self.cnn_sharing_layer_patch_3_network(input_value["patch_z_scale_3"].float()),
+                input_value["patch_3d"].float()
+            ]
+
+        cnn_outputs=[]
+        for idx, data in enumerate(cnn_input_list):
+            output = self.cnn_layers[idx](data)
+            output = output.view(output.size(0), -1)
+            cnn_outputs.append(output)
+
+        if self.use_centroid:
+            if self.use_cuda:
+                centroid = input_value["centroid"].float().cuda()
+            else:
+                centroid = input_value["centroid"].float()
+            if isinstance(self.noise_size, float):
+                noise_of_centroid = (torch.randn_like(centroid) * self.noise_size)
+                centroid = (centroid + noise_of_centroid).clamp(0,1)
+
+            centroid_output = self.centroid_identity_layer(centroid)
+            cnn_outputs.append(centroid_output.view(centroid_output.size(0), -1))
+
+        x = torch.cat(cnn_outputs, 1)
+
+        x = self.fully_connected_layer(x)
+
+        if self.use_cuda:
+            x = x.cpu()
+
+        return x
+
+    def get_2d_patch_network(self):
+        # outputsize = 29 - 3 / 2 - 3 / 2 -> 5
+        return nn.Sequential(
+            nn.Conv2d( in_channels=32, out_channels=1, kernel_size=4, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+
+        nn.Conv2d( in_channels=1, out_channels=1, kernel_size=2, stride=2, padding=0),
+        nn.ReLU(inplace=True),
+        )
+
+    def get_3d_patch_network(self):
+        # outputsize = 13 - 3 / 2 - 3 = 2
+        return nn.Sequential(
+
+            nn.Conv3d( in_channels=1, out_channels=32, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm3d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv3d( in_channels=32, out_channels=32, kernel_size=2, stride=2, padding=0),
+            nn.ReLU(inplace=True),
+
+            nn.Conv3d(in_channels=32, out_channels=1, kernel_size=4, stride=1, padding=0),
             nn.ReLU(inplace=True)
 
         )

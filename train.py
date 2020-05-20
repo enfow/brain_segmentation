@@ -34,6 +34,9 @@ def trainer (
     if seed == -1:
         seed = np.random.randint(9999)
 
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
     if model is None:
         raise ValueError("No model")
 
