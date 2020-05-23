@@ -2,6 +2,7 @@
 
 - python 3.7.4
 - pytorch
+- [paper_review](https://enfow.github.io/paper-review/segmentation/2020/04/01/deep_neural_networks_for_anatomical_brain_segmentation/)
 
 ## Architecture
 
@@ -9,7 +10,7 @@
 
 ![architecture](image/segnet_architecture.png)
 
-It has 8 pathways(six 2D patches, one 3D patch and centroid values of all regions). The model use convolution neural network to extract the features from  2D and 3D patches and use identity layer for centroid vector. After that, concatenate all of the features from each pathways and pass through the fully connected layers to make classification decision. 
+It has 8 pathways(six 2D patches, one 3D patch and centroid values of all regions). The model uses the convolution neural network to extract the features from  2D and 3D patches and the identity layer to extract features from centroid vector. After that, it concatenates all of the features from each pathway and passes it through the fully connected layers to make a classification decision. 
  
 ## Results
 
@@ -23,4 +24,4 @@ On the paper, the dice coefficient score of SegNet with MICCAI 2012 dataset is 0
 
 ![test](image/pred_label.png)
 
-As you can see, there are label unbalancing issue with the brain region size and it makes that the number of predict label very small. The issue makes not only poor results, but also hindering the learning of the next epoch with trash centroid value. Experimentally these issue tends to occur with larger model(number of layers).
+As you can see, there is an label unbalancing issue with the size of the brain region and it greatly reduces the number of prediction labels. The issue makes not only poor results, but also hinders the learning of the next epoch because the model cannot find the exact centroid value. Experimentally these issue tends to grow with the number of layers in the model.
