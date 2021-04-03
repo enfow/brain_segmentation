@@ -1,267 +1,191 @@
 import os
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
-from skimage.io import imread
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-import nibabel as nib
-
-
-### GET X Y Data ###
-
-def get_data(data_dir, data_file=None):
-
-    """
-    data_file -> None : get all data from data directory
-    """
-
-    if data_file is None and data_dir:
-        file_list = os.listdir(data_dir)
-        nii_files = [os.path.join(data_dir, file) for file in file_list if file.endswith(".nii") and not file.endswith("glm.nii")]
-        glm_files = []
-        for nii in nii_files:
-            directory, file = os.path.split(nii)
-            glm_files.append(os.path.join(directory, file.split(".")[0]+"_glm.nii"))
-
-    elif isinstance(data_file, str):
-        nii_files = [os.path.join(data_dir, data_file)]
-        glm_files = [nii_files[0].split(".n")[0] + "_glm.nii"]
+from loader.dataloader import get_data, get_valid_voxel
+from loader.dataloader import BrainSegmentationDataset, BrainSegmentationDataset3D
+from loader.utils import return_label_dicts
 
 
-    ### settings for nibabel ###
-    nib.Nifti1Header.quaternion_threshold = -1e-06
-
-    data_list = [np.array(nib.load(data).dataobj).astype(np.float64) for data in nii_files]
-    label_list = [np.array(nib.load(data).dataobj).astype(np.float64) for data in glm_files]
-
-    return data_list, label_list
-
-
-### CENTROID ###
-
-class RegionCentroids():
-    def __init__(self, n_regions):
-        self.n_regions = n_regions
-        self.barycentres = np.zeros((n_regions, 3))
-
-    def update_barycentres(self, vxs, regions):
-        self.barycentres = np.zeros((self.n_regions, 3))
-        for i in range(self.n_regions):
-            idxs = regions == i
-            if vxs[idxs].size == 0:
-                continue
-            self.barycentres[i] = (np.mean(vxs[idxs], axis=0))
-
-        # For zero values (with no regions present), set them to the mean
-        self.barycentres[self.barycentres == 0] = self.barycentres[self.barycentres != 0].mean()
-
-    def compute_scaled_distances(self, vx):
-        distances = np.linalg.norm(self.barycentres - vx, axis=1)
-        return distances
-
-# region_centroids = RegionCentroids(number_of_label+1) # parameter로 전체 label + 1개 전달
-# temp = y.nonzero()
-# vxs = np.asarray(temp).T
-# region_centroids.update_barycentres(vxs, y[temp])
-
-
-### GET DATA FOR SINGLE BRAIN
-# get centroid object
-def get_centroid_obj(y):
-    label_list = np.unique(y)
-    centroid_obj = RegionCentroids(int(label_list.max())+1) # parameter로 전체 label + 1개 전달
-    temp = y.nonzero()
-    vxs = np.asarray(temp).T
-    centroid_obj.update_barycentres(vxs, y[temp])
-    return centroid_obj
-
-
-# get valid label
-def get_valid_label(x, y):
-    valid_label = []
-    x_shape = x.shape
-    for i in range(x_shape[0]):
-        for j in range(x_shape[1]):
-            for k in range(x_shape[2]):
-                if y[i][j][k] == 0:
-                    pass
-                else:
-                    valid_label.append(
-                        {
-                            "y_index" : [i,j,k],
-                            "y_value" : int(y[i][j][k]),
-                        }
-                    )
-    return valid_label
-
-### TORCH DATALOADER
-
-
-class BrainSegmentationDataset(Dataset):
-
-    def __init__(self,single_brain_data, valid_label):
-        self.single_brain_data = single_brain_data
-        self.valid_label = valid_label
-
-    def __len__(self):
-        return len(self.valid_label)   # 이거 중요함... 이거 잘못 넣으면 출력되는 데이터 개수가 이상하게 나옴.
-
-    def __getitem__(self, idx):
-        x = {}
-        data_index = valid_label[idx]["y_index"]
-        i, j, k = data_index[0], data_index[1], data_index[2]
-
-        print(data_index)
-        print(self.single_brain_data.shape)
-        sample = self.single_brain_data[i-43:i+44, j-43:j+44, k-43:k+44]
-        print(sample.shape)
-        x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[43][29:58, 29:58]), 0)
-        x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, 43][29:58, 29:58]), 0)
-        x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(sample[:, : ,43][29:58, 29:58]), 0)
-
-        x["patch_x_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[43]), 0)
-        x["patch_y_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, 43]), 0)
-        x["patch_z_scale_3"] = torch.unsqueeze(torch.from_numpy(sample[:, :, 43]), 0)
-        
-        # x["centroid"] = self.centroid.compute_scaled_distances(sample["y_index"])
-        
-        y = valid_label[idx]["y_value"]
-        
-        return (x, y)
+present_label_list =  [  0,   4,  11,  15,  23,  30,  31,  32,  35,  36,  37,
+                        38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,
+                        49,  50,  51,  52,  55,  56,  57,  58,  59,  60,  61,
+                        62,  63,  64,  65,  66,  69,  71,  72,  73,  74,  75,
+                        76, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
+                        112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
+                        123, 124, 125, 128, 129, 132, 133, 134, 135, 136, 137,
+                        138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148,
+                        149, 150, 151, 152, 153, 154, 155, 156, 157, 160, 161,
+                        162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+                        173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183,
+                        184, 185, 186, 187, 190, 191, 192, 193, 194, 195, 196,
+                        197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207] # len(present_label_list) = 143 | all labels on train set
 
 
 ### TEST MODEL AND DATALOADER
 
+def define_argparser():
+
+    import argparse
+
+    p = argparse.ArgumentParser()
+
+    p.add_argument(
+        '--seed', default=1, type=int
+    )
+    p.add_argument(
+        '--epochs', default=10, type=int
+    )
+    p.add_argument(
+        '--lr', default=0.01, type=float
+    )
+    p.add_argument(
+        '--batch_size', default=512, type=int
+    )
+
+    config = p.parse_args()
+
+    return config
+
+
 if __name__ == "__main__":
+    from model.segnet import SegNet3DK5L4, SegNet3DK5L3, SegNet3DK5L5
 
-    ### GET DATA ###
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES']="2"
 
-    data_dir = "./Dataset/Training/Data"
-    data_file = None
+    config = define_argparser()
 
-    data_list, label_list = get_data(data_dir, data_file=data_file)
+    # get present label dictionary
+    label_to_idx, idx_to_label = return_label_dicts(present_label_list)
+    num_of_label = len(label_to_idx.keys())
 
+    seed=config.seed
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
-    ### GET DATA LOADER ###
+    # model = SegNet3DK5L3(num_of_class=num_of_label, use_cuda=True)
+    model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True)  
 
-    x, y = data_list[0], label_list[0]
+    dir_name = "{}_seed{}".format(model.name, seed)
 
-    # number_of_label = 207
+    if not os.path.exists(os.path.join('.', dir_name)):
+        os.mkdir(os.path.join('.', dir_name))
 
-    valid_label = get_valid_label(x, y)
-    brain_dataset = BrainSegmentationDataset(x, valid_label)
+    with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
+        f.write("model : {}\n".format(model))
 
-    brain_dataloader = DataLoader(brain_dataset, batch_size=32)
+        ### GET DATA ###
 
+        print("GET DATA")
+        data_dir = "./Dataset/Training/Data"
+        data_file = None
 
-    ### SETTINGS FOR TRAINING ###
+        test_dir = "./Dataset/Testing/Data"
+        test_file = None
 
-    from model.segnet import SegNet
+        # get train / test dataset
+        # data, label, test_data, test_label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=False)
 
-    learning_rate = 0.1
-    epochs = 1
-
-    model = SegNet()
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    loss_func = nn.CrossEntropyLoss()
-
-
-    ### TRAINING ###
-
-    print("TRAINING START")
-
-    step = 0
-    loss_list, acc_list = [], []
-    for epoch in range(epochs):
-        # train
-        print('epoch : {}'.format(epoch+1))
-        for x, y in brain_dataloader:
-            step += 1
-            output = model(x)
-            loss = loss_func(output, y)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            if step % 100 == 0:
-                print("step : {}".format(step))
-
-        # validation
-        for test_data, test_labels in brain_dataloader:
-            test_output = model(test_data)
-            pred = torch.max(test_output, 1)[1].data.numpy()
-            accuracy = float((pred == test_labels.data.numpy()).astype(int).sum()) / float(test_labels.size(0))
-            # print("EVALUATION) Epoch : {} | step : {} | loss : {} | accuracy : {}".format(epoch, step, round(float(loss.data),4), accuracy))
-            print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch, step,  accuracy))
-            # loss_list.append(round(float(loss.data), 2))
-            acc_list.append(round(float(accuracy), 2))
-
-
-
-
-# def get_one_hot_encoding(label, number_of_label):
-#     return np.eye(int(number_of_label) + 1)[int(label)]
-
-# def get_patches(x, y, number_of_label):
-#     patches = []
-#     x_shape = x.shape
-#     one_hot = np.eye(int(number_of_label) + 1)
-#     for i in range(x_shape[0]):
-#         for j in range(x_shape[1]):
-#             for k in range(x_shape[2]):
-#                 if y[i][j][k] == 0:
-#                     pass
-#                 else:
-#                     patches.append(
-#                         {
-#                             "y_index" : [i,j,k],
-#                             # "y_value" : one_hot[int(y[i][j][k])],
-#                             "y_value" : int(y[i][j][k]),
-#                             # "3d_patch_scale_1" : x[i-14:i+15, j-14:j+15, k-14:k+15],
-#                             "3d_patch_scale_3" : x[i-43:i+44, j-43:j+44, k-43:k+44],
-#                         }
-#                     )
-#     return patches
-
-# single_brain_data = {
-#     "x" : x,
-#     "y" : y,
-#     "patch" : get_patches(x, y, number_of_label),
-#     "centroid" : get_centroid_obj(y),
-# }
-
-
-
-# with patch data
-# class BrainSegmentationDataset(Dataset):
-
-#     def __init__(self,single_brain_data):
-#         self.single_brain_data = single_brain_data
-#         self.patch = single_brain_data["patch"]
-#         self.centroid = single_brain_data["centroid"]
-#         print("patch length", len(self.patch))
-
-#     def __len__(self):
-#         return len(self.patch)   # 이거 중요함... 이거 잘못 넣으면 출력되는 데이터 개수가 이상하게 나옴.
-
-#     def __getitem__(self, idx):
-#         x = {}
-#         sample = self.patch[idx]
-#         patch_scale_1 = sample["3d_patch_scale_1"]
-#         x["patch_x_scale_1"] = torch.unsqueeze(torch.from_numpy(patch_scale_1[14]), 0)
-#         x["patch_y_scale_1"] = torch.unsqueeze(torch.from_numpy(patch_scale_1[:, 14]), 0)
-#         x["patch_z_scale_1"] = torch.unsqueeze(torch.from_numpy(patch_scale_1[:, : ,14]), 0)
+        # get train dataset
+        data, label = get_data(data_dir, data_file=data_file, num_of_data=None, padding=43, get_test_set=False)
         
-#         patch_scale_3 = sample["3d_patch_scale_3"]
-#         x["patch_x_scale_3"] = torch.unsqueeze(torch.from_numpy(patch_scale_3[43]), 0)
-#         x["patch_y_scale_3"] = torch.unsqueeze(torch.from_numpy(patch_scale_3[:, 43]), 0)
-#         x["patch_z_scale_3"] = torch.unsqueeze(torch.from_numpy(patch_scale_3[:, :, 43]), 0)
-        
-#         x["centroid"] = self.centroid.compute_scaled_distances(sample["y_index"])
-        
-#         y = sample["y_value"]
-        
-#         return (x, y)
+        # get test dataset
+        test_data, test_label = get_data(test_dir, data_file=test_file, num_of_data=None, padding=43, get_test_set=False)
+
+
+        print("data shape : {}".format(data.shape) )
+        print("test_data shape : {}".format(test_data.shape))
+        f.write("data shape : {}\n".format(data.shape))
+        f.write("test_data shape : {}\n".format(test_data.shape))
+
+        print("Number of present label : {}".format(num_of_label))
+        f.write("Number of present label : {}\n".format(num_of_label))
+
+        ### GET DATA LOADER ###
+
+        print("GET DATALOADER")
+
+        # GET TRAINSET
+        valid_voxel = get_valid_voxel(data, label, label_to_idx)
+        brain_dataset = BrainSegmentationDataset3D(data, valid_voxel)
+        brain_dataloader = DataLoader(brain_dataset, batch_size=config.batch_size, shuffle=True)
+
+        # GET TESTSET
+        test_valid_label = get_valid_voxel(test_data, test_label, label_to_idx)
+        test_brain_dataset = BrainSegmentationDataset3D(test_data, test_valid_label)
+        test_brain_dataloader = DataLoader(test_brain_dataset, batch_size=config.batch_size, shuffle=True)
+
+
+        ### SETTINGS FOR TRAINING ###
+
+        print("SETTINGS FOR TRAINING")
+
+        learning_rate = config.lr
+        epochs = config.epochs
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        loss_func = nn.CrossEntropyLoss()
+
+        print("EPOCH : {} | learning_rate : {}".format(epochs, learning_rate))
+        f.write("EPOCH : {} | learning_rate : {} | seed : {}\n".format(epochs, learning_rate, seed))
+
+
+        ### TRAINING ###
+
+        print("TRAINING START")
+
+        step = 0
+        loss_list, acc_list = [], []
+        for epoch in range(epochs):
+            # train
+            for x, y in tqdm(brain_dataloader, desc="TRAIN) Epoch {} ".format(epoch+1)):
+                step += 1
+                optimizer.zero_grad()
+                output = model(x)
+                loss = loss_func(output, y)
+                loss.backward()
+                optimizer.step()
+                loss_list.append(round(float(loss.data), 4))
+                if step % 2000 == 0:
+                    # print("TRAIN) Epoch : {} | step : {} | loss : {}".format(epoch+1, step, loss_list[-1] ))
+                    f.write("TRAIN) Epoch : {} | step : {} | loss : {}\n".format(epoch+1, step, loss_list[-1] ))
+                del output
+                del x
+                del y
+            print("TRAIN) Epoch : {} | step : {} | loss : {}".format(epoch+1, step, loss_list[-1] ))
+            f.write("TRAIN) Epoch : {} | step : {} | loss : {}\n".format(epoch+1, step, loss_list[-1] ))
+
+            # model save
+            # if epoch % 2 == 1:
+            torch.save({
+                'epoch' : epoch+1,
+                "model_state_dict" : model.state_dict(),
+                "optimizer_state_dict" : optimizer.state_dict(),
+                "loss" : loss,
+            }, "./{dir_name}/{model_name}_{epoch}_{seed}.pth".format(dir_name=dir_name, model_name=model.name, epoch=epoch+1, seed=seed))
+
+            # test
+            # if epoch % 2 == 1:
+            model.eval()
+            count, accuracy = 0, 0
+            for test_data, test_labels in tqdm(test_brain_dataloader, desc="EVALUATION "):
+                count += 1
+                test_output = model(test_data)
+                pred = torch.max(test_output, 1)[1].data.numpy()
+                accuracy += (float((pred == test_labels.data.numpy()).astype(int).sum()) / float(test_labels.size(0)))
+                del test_data
+                del test_labels
+                del test_output
+
+            print("EVALUATION) Epoch : {} | step : {} | accuracy : {}".format(epoch+1, step,  round( accuracy / count, 4)))
+            f.write("EVALUATION) Epoch : {} | step : {} | accuracy : {}\n".format(epoch+1, step,  round( accuracy / count, 4)))
+            acc_list.append(round(float(accuracy) / count, 4))
+            model.train()
+
+        print("ACCURACY HISTORY : {}".format(acc_list))
+        f.write("ACCURACY HISTORY : {}".format(acc_list))
