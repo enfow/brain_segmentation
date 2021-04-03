@@ -170,13 +170,13 @@ def define_argparser():
     p.add_argument("--epochs", default=10, type=int)
     p.add_argument("--lr", default=0.01, type=float)
     p.add_argument("--batch_size", default=512, type=int)
-    p.add_argument("--centroid", default="y", type=str)
+    p.add_argument("--centroid", action='store_true')
     p.add_argument("--centroid_iter", default=1, type=int)
     p.add_argument("--train_size", default=None, type=int)
     p.add_argument("--test_size", default=None, type=int)
     p.add_argument("--noise_size", default=0.01, type=float)
-    p.add_argument("--save_img", default="y", type=str)
-    p.add_argument("--tensorboard", default="y", type=str)
+    p.add_argument("--save_img", action="store_true")
+    p.add_argument("--use_cuda", action="store_true")
 
     config = p.parse_args()
 
@@ -187,15 +187,7 @@ if __name__ == "__main__":
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     config = define_argparser()
-    if config.save_img == "y":
-        save_img = True
-    else:
-        save_img = False
-    if config.tensorboard == "y":
-        tensorboard = True
-    else:
-        tensorboard = False
-    if config.centroid == "y":
+    if config.centroid:
 
         # SegNet_CNN3C_FC6C
         # SegNet_CNN4D_FC5C
@@ -212,14 +204,14 @@ if __name__ == "__main__":
         model = SegNetOnPaperNoPool(
             num_of_class=num_of_label,
             use_centroid=True,
-            use_cuda=True,
+            use_cuda=config.use_cuda,
             noise_size=config.noise_size,
         )
 
         centroid_model = SegNetOnPaperNoPool(
             num_of_class=num_of_label,
             use_centroid=False,
-            use_cuda=True,
+            use_cuda=config.use_cuda,
         )
 
         trainer(
@@ -233,14 +225,12 @@ if __name__ == "__main__":
             batch_size=config.batch_size,
             lr=config.lr,
             seed=config.seed,
-            use_tensorboard=tensorboard,
-            save_img=save_img,
+            save_img=config.save_img,
             save_model=False,
         )
 
-    elif config.centroid == "n":
-
-        model = SegNet3DK5L4(num_of_class=num_of_label, use_cuda=True)
+    else:
+        model = SegNet_CNN2A_FC6C(num_of_class=num_of_label, use_cuda=config.use_cuda)
 
         trainer(
             train_size=config.train_size,
@@ -252,10 +242,7 @@ if __name__ == "__main__":
             batch_size=config.batch_size,
             lr=config.lr,
             seed=config.seed,
-            use_tensorboard=tensorboard,
-            save_img=save_img,
+            save_img=config.save_img,
             save_model=False,
         )
 
-    else:
-        raise ValueError("check centroid config")

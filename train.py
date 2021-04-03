@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from loader.centroid import get_centroid_list, get_updated_centroid_list
@@ -29,7 +28,6 @@ def trainer(
     batch_size=512,
     lr=0.01,
     seed=-1,
-    use_tensorboard=False,
     save_img=True,
     save_model=False,
 ):
@@ -64,19 +62,6 @@ def trainer(
         raise ValueError("Save Directory is Already Exist")
     else:
         os.mkdir(os.path.join(".", dir_name))
-
-    if use_tensorboard:
-        writer = SummaryWriter(log_dir=os.path.join(".", "runs", dir_name))
-        writer.add_hparams(
-            {
-                "seed": seed,
-                "lr": lr,
-                "centroid_iter": centroid_iter,
-                "train_size": dsize,
-                "batch_size": batch_size,
-            },
-            {},
-        )
 
     with open("./{}/log.txt".format(dir_name, model.name, seed), "w") as f:
 
@@ -284,10 +269,6 @@ def trainer(
                     loss.backward()
                     optimizer.step()
                     loss_list.append(round(float(loss.data), 4))
-                    if use_tensorboard:
-                        writer.add_scalar(
-                            "loss/train", round(float(loss.data), 4), step
-                        )
                     if step % average_loss_size == 0:
                         average_loss = round(
                             np.sum(loss_list[-average_loss_size:]) / average_loss_size,
@@ -374,11 +355,6 @@ def trainer(
                             dir_name,
                             "pred_test_label",
                             save_label=save_number,
-                        )
-
-                    if use_tensorboard:
-                        writer.add_scalar(
-                            "accuracy/test", round(accuracy / count, 4), centroid_step
                         )
 
                     print(
